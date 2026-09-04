@@ -1,73 +1,129 @@
 # Nimbus Workshop
 
 Nimbus is a small retrieval-augmented study assistant used for a hands-on
-exercise about latency, cost, quality, and capacity. The application can run
-locally for the optimization activity or on Cloud Run so participants only
-need a browser.
+incident-investigation exercise about latency, cost, quality, and capacity.
+
+**The activity is symptom-first.** Each team is paged to a different fault on
+their own Cloud Run service, sees it only as numbers against a target, and has
+to attribute the time before the system will let them change anything.
+
+The design is [`DEV_PLAN.md`](DEV_PLAN.md); where the work actually stands is
+[`BUILD_STATUS.md`](BUILD_STATUS.md).
 
 ## Choose a path
 
 | Who | Start here | What you need |
 | --- | --- | --- |
-| Participant using the shared cloud service | Open the URL from the facilitator | A browser |
-| Facilitator deploying the shared service | [`deploy/README.md`](deploy/README.md) | Google Cloud project and permissions |
+| **Participant in the session** | [`participant-quickstart.md`](participant-quickstart.md) | A terminal, plus a URL and team token from the facilitator |
+| Facilitator deploying the room | [`deploy/README.md`](deploy/README.md) and `facilitators/deploy_incident.py` | Google Cloud project and permissions |
+| Facilitator running the session | [`facilitators/runsheet.md`](facilitators/runsheet.md) | The deployed room, preflighted |
 | Facilitator benchmarking Cloud Run | [`02_benchmark/README.md`](02_benchmark/README.md) | A prepared checkout and admin token |
-| Participant or facilitator running locally | [`participant-preflight.md`](participant-preflight.md) | Docker Desktop, 8 GB RAM, and about 8 GB disk |
+| Anyone running it locally | [`participant-preflight.md`](participant-preflight.md) | Docker Desktop, 8 GB RAM, about 8 GB disk |
 
 The detailed local service guide is [`01_deploy/README.md`](01_deploy/README.md).
 Contributor and pull-request checks are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
+> **Facilitator materials are not for participants.** `facilitators/` holds the
+> incident catalog and the answer key. A participant with the repository checked
+> out can read `01_deploy/incident.py` and learn that a retrieval delay is
+> *possible*; nothing there tells them whether theirs is one.
+
 ## What the workshop teaches
 
-You will diagnose a slow service, change one lever at a time, and prove the
-effect with measurements. The important distinction is:
+Each team is paged to a **different** fault on **their own** service. They see
+it only as numbers against a target, must commit to a diagnosis before the
+system will let them change anything, and then prove the fix worked.
 
-- High queue wait means requests are waiting for capacity.
-- High compute time means each request is doing too much work.
-- High quality with unacceptable cost requires a trade-off, not a guess.
+The loop is: **measure → attribute → commit to a diagnosis → change one thing →
+measure again.**
 
-The optimization ladder is deliberately ordered:
+The report names the largest contributor to latency. It deliberately never
+names the lever that fixes it — that part is the exercise. The distinctions it
+exists to make visible are:
 
-1. Measure the baseline.
-2. Enable useful response or semantic caching.
-3. Reduce prompt, retrieval, and output work.
-4. Route easy questions to a cheaper model when a second model is configured.
-5. Add concurrency or Cloud Run instances only after measuring the queue.
-6. Shed excess load honestly when serving everyone would cause timeouts.
+- High **app queue wait** means requests are waiting for capacity.
+- High **generate** means each request is doing too much model work.
+- High **retrieve** means a dependency is degraded, not the model.
+- **Token counts** separate a fat prompt from a slow model, and unlike
+  per-token rates they do not move with load.
+- Green latency and cost with **bad answers** is its own failure, and only the
+  quality eval sees it.
 
 ## Architecture
 
 ```text
-participant browser
-        │
-        ▼
-Cloud Run or local FastAPI service  (the backend proxy)
-        │  retrieval · cache · queue · timing · SSE
-        ▼
-Google-managed model API             or local Ollama + Llama model
+participant terminal  (cli/nimbus)          participant browser
+        │  brief · baseline · diagnose              │
+        │  hypothesis · set · bench                 │
+        └───────────────┬───────────────────────────┘
+                        ▼
+        nimbus-team-<id>   one Cloud Run service per team
+                        │
+   shed → queue → cache → retrieve → assemble → generate
+                        │            ▲
+                        │            └── incident.py injects the fault here,
+                        │                INSIDE the timing context
+                        ▼
+        Vertex AI · gemini-2.5-flash / -flash-lite / -pro
 ```
 
-The FastAPI service is already the proxy. It keeps model credentials out of
-the browser, retrieves course notes, controls concurrency, records metrics, and
-streams answers. A second API gateway or backend proxy is not required for a
-10–20 participant workshop.
+The FastAPI service is the proxy. It keeps model credentials out of the browser,
+retrieves course notes, controls admission, records metrics, and streams
+answers. A second API gateway is not required for a 10–20 participant workshop.
 
-## Cloud Run quick start (after local verification)
+**Latency is additive, and the report shows the addends.** Every row is a slice
+of the same wall clock and the rows sum to the reported end-to-end number; a
+residual that does not sum is a missing instrument, not rounding. The split that
+matters most is **queue wait versus compute** — an overloaded queue and a slow
+model look identical from outside and have opposite fixes.
+
+**Two speeds, deliberately.** `nimbus set` applies a lever in-process in about a
+second. Capacity changes require a new revision at ~25–40s. Which lever belongs
+to which speed is a teaching decision: the slow path holds exactly the levers
+participants should reach for last.
+
+**One service per team.** Own incident, own token, own queue, own caches, own
+revision history. Shared, every table's load lands in every other table's
+numbers.
+
+## Cloud Run quick start
+
+This is the path the session runs on.
 
 ### For participants
 
-Open the Cloud Run URL in a browser and ask questions from the Nimbus page.
-Participants do not need to clone the repository and should never receive the
-admin token.
+Participants get a **URL and a team token** from the facilitator and drive the
+investigation from the `nimbus` CLI. See
+[`participant-quickstart.md`](participant-quickstart.md).
+
+```bash
+nimbus init <url> <token>   # point this terminal at your team's service
+nimbus brief                # what was reported, and the targets to hit
+nimbus baseline             # measure, change nothing
+nimbus diagnose             # read the last run back
+nimbus hypothesis ...       # record what you think is wrong
+nimbus set KEY=VALUE        # change one setting on the running service (~1s)
+nimbus bench                # measure again
+nimbus status               # what the service is configured with
+```
+
+`POST /levers` returns **`409 diagnose first`** until a hypothesis is on record,
+when the service is deployed with `NIMBUS_REQUIRE_HYPOTHESIS=true`. That gate is
+what makes "diagnose before you change anything" a property of the system rather
+than a facilitator walking the room.
+
+The browser UI at `/` is the "what is this thing" view — it renders the request
+trace, retrieved note excerpts, and the queue-wait versus compute split.
+Participants never receive the admin token for a service they do not own.
 
 ### For the facilitator
 
-The default deployment uses one 1-vCPU/1-GiB Cloud Run instance, concurrency 2,
-and maximum instances 1. This is a starting point for 10–20 participants;
-measure queue wait before increasing capacity.
+Each team gets **its own Cloud Run service**, carrying its own incident, token,
+queue, caches and revision history. One shared service means every table
+measures every other table's load.
 
 1. Ask the cloud owner for the project ID, region, runtime service account,
-   model access, and `nimbus-admin-token` Secret Manager secret.
+   model access, and the `nimbus-admin-token` Secret Manager secret.
 2. Copy and fill the deployment variables:
 
    ```bash
@@ -76,30 +132,56 @@ measure queue wait before increasing capacity.
    source deploy/cloudrun.env
    ```
 
-3. Build and deploy:
+3. Deploy one service per incident. A service must be **born with its whole
+   incident** — deploying only the injection produces services that are wrong in
+   ways that look like nothing at all:
 
    ```bash
-   bash deploy/deploy.sh
+   # the whole room, one service per team
+   python facilitators/deploy_incident.py --all --prefix nimbus-team
+
+   # or a single team
+   python facilitators/deploy_incident.py --incident retrieval --service nimbus-team-a
    ```
 
-4. Save the printed service URL and verify it:
+   `deploy/deploy.sh` builds the image once and reuses it when the tree is
+   clean. **Never rebuild during a session** — `--update-env-vars` on an
+   existing image is ~30s, `--source` is 2–4 minutes and will end the activity.
+
+4. Confirm every service *before* URLs go out. `/health` alone is not
+   confirmation — a service pointed at a model the project cannot reach starts
+   up healthy and 404s every request:
 
    ```bash
-   export NIMBUS_URL='https://your-service-xxxxx.run.app'
-   export NIMBUS_ADMIN_TOKEN='value-from-secret-manager'
-   curl -fsS "$NIMBUS_URL/health"
-   make metrics URL="$NIMBUS_URL"
-   make bench URL="$NIMBUS_URL"
+   python facilitators/preflight.py --all-services
    ```
+
+`min-instances=1` is required per service. A cold container is slow enough to
+move the largest row of the report onto the wrong component, so a team's first
+benchmark would diagnose the platform instead of the incident.
 
 Cloud mode uses ADC from the Cloud Run runtime service account; no API key or
-service-account JSON file belongs in this repository. The adapter defaults to
-Google-managed Mistral Small 3.1 (`mistral-small-2503`), a 24B-class model, and
-keeps the model ID configurable. Confirm availability and pricing before the
-event in the [Google Mistral model documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/mistral/mistral-small-3-1).
-The current Mistral token rates are tracked as an explicit assumption in
-[`scenario.json`](scenario.json) and should be rechecked against the [Google
-pricing page](https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing).
+service-account JSON file belongs in this repository.
+
+The adapter speaks three API styles (`gemini`, `mistral`, `openai`) and this
+project uses **`gemini`**. The two routing tiers are
+`gemini-2.5-flash` (large) and `gemini-2.5-flash-lite` (small); `gemini-2.5-pro`
+is used by the decode incident only.
+
+> **Mistral is not available on this project.** `mistral-small-2503`, `-2506`
+> and `mistral-nemo-2407` all return HTTP 404 in `us-central1` *and* `global`
+> — Model Garden access was never granted. Verified by direct API call. The
+> Mistral price entry in [`scenario.json`](scenario.json) is retained for
+> reference and marked retired.
+
+`NIMBUS_GEMINI_THINKING_BUDGET=0` is mandatory and `deploy.sh` forwards it
+explicitly. Gemini 2.5 spends the *output* token budget thinking before it
+answers, so at the workshop's `MAX_TOKENS=32` it returns **no text at all**
+while latency and cost still read as healthy.
+
+Token prices were verified against the Gemini pricing page on 2026-09-04 and
+are tracked as auditable assumptions in [`scenario.json`](scenario.json).
+Recheck them before the event.
 
 ## Local-first Docker quick start
 
@@ -149,7 +231,10 @@ make docker-bench ARGS="--requests 4 --concurrency 1"
 
 ## Local Python quick start
 
-Use this path for the original hands-on activity:
+The offline path. Useful for developing on the repository and for the original
+optimization activity, but **it is not what the session runs** — it uses the
+lightweight SmolLM2 tiers rather than Gemini, so its latency numbers describe a
+different system.
 
 ```bash
 make setup       # create .venv, install dependencies, build the note index
@@ -176,9 +261,12 @@ Run the benchmark:
 make bench
 ```
 
-This path uses the original lightweight Hugging Face tiers. Use the Docker
-path above when you want to exercise the preferred local 8B–14B-class Llama
-setup.
+This path uses the lightweight SmolLM2 Hugging Face tiers. Use the Docker path
+above for the local 8B–14B-class Llama setup, or Cloud Run for the real thing.
+
+> Note: `scenario.json` records its measured baselines as `_backend: "google"`.
+> Token comparators printed against a *local* run are therefore comparing across
+> backends, and the report does not currently say so.
 
 Change one setting in `01_deploy/config.py`, reload, and measure again. The
 Docker stack mounts this control file, so no image rebuild is needed for a
@@ -206,9 +294,22 @@ to participant `/ask` requests or written to benchmark results.
 | --- | --- | --- | --- |
 | `GET` | `/` | None | Participant browser UI |
 | `GET` | `/health` | None | Readiness/liveness check |
+| `GET` | `/brief` | None | The incident's public symptom, targets, and the traffic profile it was calibrated under |
 | `POST` | `/ask` | None | Stream an answer as SSE |
+| `POST` | `/hypothesis` | Team token | Record a diagnosis. Deliberately not graded |
+| `POST` | `/levers` | Team token | Change a setting on the running service (~1s). `409` until a hypothesis exists |
+| `GET` | `/declarations` | Team token | Hypotheses and lever changes recorded so far |
 | `GET` | `/metrics` | Admin header in cloud mode | Read config and counters |
-| `POST` | `/reload` | Admin header in cloud mode | Reload local config and clear caches |
+| `POST` | `/reload` | Admin header in cloud mode | Re-read the container's `config.py` and clear caches |
+
+`/brief` carries the **symptom only**. The cause is never served by the
+application, and `NIMBUS_INCIDENT*` values must not appear in `/metrics`,
+`/health`, a trace event, an error message or the browser bundle — one leak
+turns an investigation into a lookup.
+
+`/reload` re-reads the *container's* `config.py`, which a participant cannot
+edit, so on Cloud Run it can never apply their change. `/levers` takes the value
+from the request instead. That is the difference between the two.
 
 Cloud admin calls use:
 
@@ -219,52 +320,66 @@ X-Nimbus-Admin-Token: <secret value>
 ## Configuration
 
 Local participants edit `01_deploy/config.py`. Cloud deployments use the same
-source defaults plus `NIMBUS_*` environment overrides, so the container can be
-tuned without rebuilding the image. Important settings are:
+source defaults plus `NIMBUS_*` environment overrides, and in a session teams
+change them at runtime with `nimbus set` (`POST /levers`), which is validated
+against one allow-list in `config.LEVERS`.
 
-| Setting | Effect |
+| Lever | Effect |
 | --- | --- |
-| `RESPONSE_CACHE` | Reuses an identical completed answer |
-| `SEMANTIC_CACHE` | Reuses answers for sufficiently similar questions |
-| `MAX_TOKENS` | Caps generated output and model cost |
-| `SYSTEM_PROMPT` | Chooses `LONG`, `TRIMMED`, or `VERBOSE` instructions |
-| `RETRIEVE_K` | Controls how many note chunks enter the prompt |
-| `MAX_CONCURRENT` | Limits in-process model work |
-| `SHED_ABOVE_QUEUE` | Returns `429` when the queue is too deep |
-| `NIMBUS_MAX_INSTANCES` | Cloud Run capacity, set at deployment time |
+| `RESPONSE_CACHE` | Exact-match cache of finished answers. A hit costs nothing at all |
+| `PREFIX_CACHE` | Reuse of the static prompt block. Discounts *input* only; generation still bills |
+| `SEMANTIC_CACHE` | Matches re-phrasings by embedding similarity. A hit costs nothing |
+| `SEMANTIC_CACHE_THRESHOLD` | Similarity above which two questions count as the same. Lower = more hits, more wrong answers |
+| `MAX_TOKENS` | Caps generated output, and so both latency and cost |
+| `SYSTEM_PROMPT` | `LONG`, `TRIMMED`, or `VERBOSE` instructions |
+| `RETRIEVE_K` | How many note chunks enter the prompt |
+| `ROUTE_EASY` | Send easy questions to the small tier |
+| `MODEL_TIER` | `large` or `small`. `small` makes latency and cost look fantastic — check the eval before shipping it |
+| `MAX_CONCURRENT` | How many requests may compute at once. The rest wait, and that wait is what `app queue wait` measures |
+| `SHED_ABOVE_QUEUE` | Return `429` once the queue is deeper than this |
 
-`REPLICAS` is only a local workshop simulation. Cloud Run instance count must
-be configured with the deployment script and then verified with measurements.
+Capacity levers are deploy-time, not runtime: `NIMBUS_MIN_INSTANCES`,
+`NIMBUS_MAX_INSTANCES`, Cloud Run `--concurrency`, CPU and memory. Making them
+visibly slower than a lever change is honest — they are the class of fix the
+activity wants participants to reach for *last*.
 
-## Repository map
+**`MAX_CONCURRENT` must stay below the benchmark's concurrency.** If they match,
+nothing ever queues, `app queue wait` reads 0.00s, and the capacity incident
+disappears with no error at all.
 
-```text
-01_deploy/       FastAPI service, model adapters, retrieval, participant UI
-02_benchmark/    Load generator and latency/cost report
-facilitators/    Quality evaluation and ladder calibration tools
-data/            Course notes and build-time retrieval index
-deploy/          Cloud Run deployment script and cloud-owner checklist
-Dockerfile       Reproducible Cloud Run image
-Dockerfile.local Local app image for the Ollama Compose stack
-docker-compose.local.yml
-                  Ollama model server, model pull, local app, and results mount
-Makefile         Setup, Docker, serve, benchmark, reload, and metrics commands
-scenario.json    Workshop SLOs and model pricing inputs
-```
+`REPLICAS` is only a local workshop simulation. Cloud Run instance count must be
+set at deployment and then verified by measurement.
 
 ## Troubleshooting
 
 - `make serve` fails because the port is busy: run `make serve PORT=8001`.
 - `make bench` reports zero successes: check `curl .../health`, the URL, and
-  whether the service finished startup.
+  whether the service finished startup. A run with no successes must never
+  score a PASS — percentiles over an empty list are 0.0, and `0.0 <= SLO`.
 - Cloud `/metrics` or `/reload` returns `401`: export the correct
   `NIMBUS_ADMIN_TOKEN` in the facilitator terminal.
+- `nimbus set` returns `409 diagnose first`: that is the gate working. Record a
+  hypothesis first.
 - Cloud startup fails: verify the runtime service account has Vertex AI access,
   the model is enabled in the selected region, and `GOOGLE_CLOUD_PROJECT` and
   `GOOGLE_CLOUD_LOCATION` are correct.
-- Cost is shown as `UNKNOWN`: the streaming provider did not return token usage
+- **The service is healthy but every answer is empty**: the thinking budget.
+  Gemini 2.5 spends the output budget thinking before it answers; at
+  `MAX_TOKENS=32` it returns `finishReason=MAX_TOKENS` with no text parts while
+  latency and cost still read as fine. `preflight.py` checks for exactly this.
+- Cost is shown as `UNKNOWN`: the streaming provider did not return token usage,
   or the selected model has no price entry in `scenario.json`. Do not treat
   missing usage as zero cost.
+- **Latency numbers look wrong by ~2x**: something else was running on the
+  machine, or the container was cold. Both have produced wrong answer keys on
+  this project. Warm the service and measure with nothing else running.
 
-For the full exercise instructions, use the deployment and benchmark guides
-linked at the top of this page.
+## Before a session
+
+Latency is hardware- and region-dependent; cost is not. Re-derive the SLO in
+`scenario.json` from several warm runs on the deployment the session will
+actually use, then preflight every service before URLs go out.
+
+`facilitators/eval_card.md`, `facilitators/answer_key.md` and
+`facilitators/signatures.json` are **generated from measurement** — never
+hand-edit them.
