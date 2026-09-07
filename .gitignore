@@ -9,6 +9,7 @@ data/index.npz
 .nimbus-runs/
 
 archive/
+docs/
 
 # Benchmark output is scratch -- EXCEPT the runs the documents cite as evidence.
 # A committed claim whose measurement is not committed cannot be checked, and
