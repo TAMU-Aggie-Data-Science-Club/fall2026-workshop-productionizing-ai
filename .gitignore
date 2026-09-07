@@ -1,6 +1,24 @@
 .venv/
+.venv-*/
+.participant-venv/
 deploy/*.env
 __pycache__/
 *.pyc
-results/*.json
 data/index.npz
+*.swp
+.nimbus-runs/
+
+archive/
+docs/
+
+# Benchmark output is scratch -- EXCEPT the runs the documents cite as evidence.
+# A committed claim whose measurement is not committed cannot be checked, and
+# docs/ENGINEERING_GUIDE.md and docs/DEVELOPMENT_LOG.md link these by name.
+results/*
+!results/cloud-concurrent-20260906/
+!results/cloud-queue-20260906/
+!results/cloud-rehearsal-20260906/
+!results/cloud-final-state-20260906.json
+!results/engineering-audit-2026-09-05-cloud-run.json
+!results/engineering-audit-2026-09-05-cloud-service.json
+!results/engineering-audit-2026-09-05-local-run.json

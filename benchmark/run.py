@@ -31,11 +31,12 @@ import random
 import time
 
 import httpx
+from run_context import context, run_directory, next_run, config_signature
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCENARIO = json.loads((ROOT / "scenario.json").read_text())
 PROMPTS = [json.loads(line) for line in
-           (ROOT / "02_benchmark" / "prompts.jsonl").read_text().splitlines() if line.strip()]
+           (ROOT / "benchmark" / "prompts.jsonl").read_text().splitlines() if line.strip()]
 RESULTS = ROOT / "results"
 
 
@@ -47,6 +48,7 @@ async def one_request(client, url, question, results, sem):
         stats = {}
         request_error = None
         saw_done = False
+        saw_text = False
         try:
             async with client.stream("POST", f"{url}/ask",
                                      json={"question": question}) as resp:
@@ -64,6 +66,7 @@ async def one_request(client, url, question, results, sem):
                         break
                     event = json.loads(payload)
                     if "delta" in event:
+                        saw_text = saw_text or bool(event["delta"].strip())
                         now = time.perf_counter()
                         if ttft is None:
                             ttft = now - sent
@@ -78,9 +81,9 @@ async def one_request(client, url, question, results, sem):
                 results.append({"ok": False, "shed": False,
                                 "error": request_error})
                 return
-            if not saw_done or not stats:
+            if not saw_done or not stats or not saw_text:
                 results.append({"ok": False, "shed": False,
-                                "error": "incomplete response from service"})
+                                "error": "incomplete or empty response from service"})
                 return
         except Exception as exc:  # noqa: BLE001
             results.append({"ok": False, "shed": False, "error": repr(exc)})
@@ -130,8 +133,7 @@ async def warmup(url, n):
         for i in range(n):
             try:
                 async with client.stream("POST", f"{url}/ask",
-                                         json={"question": PROMPTS[i]["question"],
-                                               "max_tokens": 4}) as r:
+                                         json={"question": PROMPTS[i % len(PROMPTS)]["question"]}) as r:
                     async for _ in r.aiter_lines():
                         pass
             except Exception:  # noqa: BLE001, S110
@@ -144,6 +146,7 @@ def main() -> None:
     p.add_argument("--url", default=os.environ.get("NIMBUS_URL", "http://127.0.0.1:8000"))
     p.add_argument("--admin-token", default=os.environ.get("NIMBUS_ADMIN_TOKEN", ""),
                    help="token for protected /metrics; never written to results")
+    p.add_argument("--session", default="default")
     p.add_argument("--requests", type=int, default=d["requests"])
     p.add_argument("--rate", type=float, default=d["rate"],
                    help="arrivals per second (Poisson)")
@@ -168,6 +171,7 @@ def main() -> None:
     # Record what the server was actually running. Reading it from /metrics
     # rather than from config.py means the report describes the deployment you
     # measured, not the file you happen to have open in your editor.
+    metrics_payload = {}
     server_config = {}
     server_runtime = {}
     try:
@@ -194,16 +198,27 @@ def main() -> None:
     results, duration = asyncio.run(
         drive(args.url, questions, args.rate, args.concurrency))
 
-    RESULTS.mkdir(exist_ok=True)
-    run_no = len(list(RESULTS.glob("run-*.json"))) + 1
+    directory = run_directory(RESULTS, args.url, args.session)
+    directory.mkdir(parents=True, exist_ok=True)
+    run_no = next_run(directory)
     recorded_args = {k: v for k, v in vars(args).items() if k != "admin_token"}
     payload = {"run": run_no, "label": args.label, "duration_s": duration,
                "args": recorded_args, "server_config": server_config,
-               "server_runtime": server_runtime, "results": results}
-    (RESULTS / f"run-{run_no}.json").write_text(json.dumps(payload, indent=2))
+               "server_runtime": server_runtime, "results": results,
+               "context": context(args.url, args.session, vars(args), metrics_payload),
+               "config_signature": config_signature(metrics_payload),
+               "configuration_stable": False}
+    try:
+        after = httpx.get(f"{args.url}/metrics", timeout=10,
+            headers={"X-Nimbus-Admin-Token": args.admin_token} if args.admin_token else {})
+        payload["configuration_stable"] = bool(metrics_payload) and after.status_code == 200 and config_signature(after.json()) == payload["config_signature"]
+    except httpx.HTTPError:
+        pass
+    with (directory / f"run-{run_no}.json").open("x") as f:
+        json.dump(payload, f, indent=2)
 
     from report import render          # noqa: PLC0415
-    print(render(payload, SCENARIO, RESULTS))
+    print(render(payload, SCENARIO, directory))
 
 
 if __name__ == "__main__":

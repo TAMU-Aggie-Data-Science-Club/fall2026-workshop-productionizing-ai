@@ -99,7 +99,7 @@ This makes port 8000 publicly reachable and prints a URL like
 
 ## Cloud Run path
 
-For a shared participant URL, use the Cloud Run deployment in the repository
+For a service and token per team, use the Cloud Run deployment in the repository
 root. The FastAPI app in this folder is already the backend proxy; it calls a
 Google-managed model when `NIMBUS_MODEL_BACKEND=google` and uses ADC from the
 Cloud Run runtime service account. See [`deploy/README.md`](../deploy/README.md)
@@ -184,8 +184,10 @@ make docker-reload
 ```
 
 For Cloud Run, export `NIMBUS_URL` and `NIMBUS_ADMIN_TOKEN` before `make
-metrics` or `make reload`. Participants only need the service URL and use the
-browser page at `/`.
+metrics` or `make reload`. Participants use their own team URL/token through
+`cli/nimbus`; see the [participant quickstart](../participants/quickstart.md).
+Use `nimbus set` for remote changes: `/reload` cannot read laptop edits into a
+deployed container. The browser page at `/` provides chat and request traces.
 
 After every change to `config.py`, run `make reload`, then run the benchmark
 again. Reloading keeps the models warm and clears response caches, so each

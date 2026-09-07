@@ -86,14 +86,24 @@ def ask(url: str, question: str) -> str:
         data=json.dumps({"question": question}).encode(),
         headers={"Content-Type": "application/json"})
     parts = []
+    complete = False
+    stats = None
+    error = False
     with urllib.request.urlopen(req, timeout=300) as r:
         for raw in r:
             line = raw.decode().strip()
-            if line.startswith("data: ") and line != "data: [DONE]":
+            if line == "data: [DONE]":
+                complete = True
+                break
+            if line.startswith("data: "):
                 ev = json.loads(line[6:])
                 if "delta" in ev:
                     parts.append(ev["delta"])
-    return "".join(parts)
+                elif "stats" in ev:
+                    stats = ev["stats"]
+                elif "error" in ev:
+                    error = True
+    return "".join(parts) if complete and stats and not error else ""
 
 
 def main() -> None:
@@ -114,7 +124,10 @@ def main() -> None:
     def score_set(cases):
         hits, misses = 0, []
         for question, terms in cases:
-            answer = ask(args.url, question).lower()
+            try:
+                answer = ask(args.url, question).lower()
+            except Exception:
+                answer = ""
             if any(t.lower() in answer for t in terms):
                 hits += 1
             else:

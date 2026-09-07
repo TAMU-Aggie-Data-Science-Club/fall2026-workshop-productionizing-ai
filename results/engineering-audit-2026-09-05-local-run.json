@@ -1,0 +1,133 @@
+{
+  "run": 1,
+  "label": "engineering audit: Python local smoke only",
+  "duration_s": 10.702668291000009,
+  "args": {
+    "url": "http://127.0.0.1:8000",
+    "requests": 4,
+    "rate": 1.0,
+    "concurrency": 2,
+    "warmup": 1,
+    "label": "engineering audit: Python local smoke only"
+  },
+  "server_config": {
+    "MODEL_BACKEND": "local",
+    "RESPONSE_CACHE": false,
+    "PREFIX_CACHE": false,
+    "SEMANTIC_CACHE": false,
+    "SEMANTIC_CACHE_THRESHOLD": 0.92,
+    "MAX_TOKENS": 32,
+    "SYSTEM_PROMPT": "LONG",
+    "RETRIEVE_K": 4,
+    "ROUTE_EASY": false,
+    "MODEL_TIER": "large",
+    "MAX_CONCURRENT": 2,
+    "REPLICAS": 1,
+    "SHED_ABOVE_QUEUE": null
+  },
+  "server_runtime": {
+    "provider": "local"
+  },
+  "results": [
+    {
+      "ok": true,
+      "shed": false,
+      "latency_s": 4.899733874997764,
+      "ttft_s": 2.129858542000875,
+      "itl_ms": 110.42605331982486,
+      "queue_wait_ms": 0.6,
+      "compute_ms": 4890.0,
+      "stages_ms": {
+        "cache": 0.0,
+        "retrieve": 10.9,
+        "assemble": 0.0,
+        "generate": 4878.2
+      },
+      "upstream_retries": 0,
+      "provider_status": null,
+      "tokens_in": 772,
+      "tokens_out": 32,
+      "tokens_cached": 0,
+      "usage_source": "local",
+      "provider": "local",
+      "model": "",
+      "cache": "miss",
+      "tier": "large"
+    },
+    {
+      "ok": true,
+      "shed": false,
+      "latency_s": 5.5231593339995015,
+      "ttft_s": 3.079867334003211,
+      "itl_ms": 121.9786291498167,
+      "queue_wait_ms": 0.8,
+      "compute_ms": 5518.5,
+      "stages_ms": {
+        "cache": 0.0,
+        "retrieve": 6.5,
+        "assemble": 0.0,
+        "generate": 5511.6
+      },
+      "upstream_retries": 0,
+      "provider_status": null,
+      "tokens_in": 819,
+      "tokens_out": 32,
+      "tokens_cached": 0,
+      "usage_source": "local",
+      "provider": "local",
+      "model": "",
+      "cache": "miss",
+      "tier": "large"
+    },
+    {
+      "ok": true,
+      "shed": false,
+      "latency_s": 5.569007125006465,
+      "ttft_s": 3.071733625001798,
+      "itl_ms": 89.05015028566206,
+      "queue_wait_ms": 0.9,
+      "compute_ms": 5559.7,
+      "stages_ms": {
+        "cache": 0.0,
+        "retrieve": 12.4,
+        "assemble": 0.0,
+        "generate": 5546.6
+      },
+      "upstream_retries": 0,
+      "provider_status": null,
+      "tokens_in": 797,
+      "tokens_out": 32,
+      "tokens_cached": 0,
+      "usage_source": "local",
+      "provider": "local",
+      "model": "",
+      "cache": "miss",
+      "tier": "large"
+    },
+    {
+      "ok": true,
+      "shed": false,
+      "latency_s": 5.169787708997319,
+      "ttft_s": 2.6903363340024953,
+      "itl_ms": 91.6775941109841,
+      "queue_wait_ms": 0.3,
+      "compute_ms": 5166.1,
+      "stages_ms": {
+        "cache": 0.0,
+        "retrieve": 9.8,
+        "assemble": 0.0,
+        "generate": 5155.7
+      },
+      "upstream_retries": 0,
+      "provider_status": null,
+      "tokens_in": 779,
+      "tokens_out": 32,
+      "tokens_cached": 0,
+      "usage_source": "local",
+      "provider": "local",
+      "model": "",
+      "cache": "miss",
+      "tier": "large"
+    }
+  ]
+}

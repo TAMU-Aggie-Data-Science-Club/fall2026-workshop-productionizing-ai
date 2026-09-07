@@ -30,4 +30,4 @@ ENV NIMBUS_ALLOW_MODEL_DOWNLOAD=0 \
     PORT=8080
 
 EXPOSE 8080
-CMD ["sh", "-c", "exec uvicorn app:app --app-dir 01_deploy --host 0.0.0.0 --port ${PORT:-8080}"]
+CMD ["sh", "-c", "exec uvicorn app:app --app-dir service --host 0.0.0.0 --port ${PORT:-8080}"]

@@ -7,6 +7,7 @@
     "slo_p95_latency_s": 1.5,
     "budget_usd_per_month": 1500,
     "quality_bar_eval_pct": 80,
+    "minimum_success_rate": 1.0,
     "_comment": "DERIVED FROM REPEATED MEASUREMENT on Cloud Run + Gemini 2.5 Flash, 2026-09-04, warm instance. Healthy p95 over four runs: 0.74 0.82 0.88 1.05 -- the spread is the provider's, measured directly at p50 838ms / p95 1492ms. A single healthy run is NOT enough to set this from; the first attempt used one 0.74s run, and the next healthy run came in at 1.14s and scored MARGINAL against its own SLO. 1.5s clears the worst healthy run by 30% and fails queue (3.19-3.62s) by more than double. Cost at $1,500/mo separates prompt ($1,953) and decode ($12,852) from everything else ($158-$648). RE-DERIVE on the deployment the session will use, from SEVERAL runs, with a WARM instance -- a cold container moved the dominant ledger row onto the wrong component entirely."
   },
   "traffic": {

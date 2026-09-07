@@ -10,7 +10,7 @@ import sys
 
 import numpy as np
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "service"))
 from embed import embed_texts  # noqa: E402
 
 NOTES_DIR = pathlib.Path(__file__).parent / "course_notes"

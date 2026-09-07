@@ -6,7 +6,7 @@ of minutes. Restores shipping defaults on exit no matter how it ends.
 import json, os, pathlib, re, subprocess, sys, urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-CFG = ROOT / "01_deploy" / "config.py"
+CFG = ROOT / "service" / "config.py"
 PY = str(ROOT / ".venv" / "bin" / "python")
 ORIGINAL = CFG.read_text()
 URL = os.environ.get("NIMBUS_URL", "http://127.0.0.1:8000").rstrip("/")
@@ -82,7 +82,7 @@ try:
         rows.append(data)
         # Persist after EVERY config: one failure at config 3 should not throw
         # away configs 1 and 2.
-        (ROOT / "facilitators" / "eval_results.json").write_text(json.dumps(rows, indent=2))
+        (ROOT / "facilitators" / "generated" / "eval_results.json").write_text(json.dumps(rows, indent=2))
         print(f"{data['score_pct']:5.1f}%  {label}  "
               f"(extraction {data['extraction_pct']:.0f}%, reasoning {data['reasoning_pct']:.0f}%)",
               flush=True)

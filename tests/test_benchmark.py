@@ -7,7 +7,7 @@ import unittest
 import httpx
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "02_benchmark"))
+sys.path.insert(0, str(ROOT / "benchmark"))
 
 import run  # noqa: E402
 

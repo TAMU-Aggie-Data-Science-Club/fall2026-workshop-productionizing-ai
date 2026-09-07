@@ -1,0 +1,78 @@
+{
+  "session": "cloud-rehearsal-20260906",
+  "targets": [
+    {
+      "name": "nimbus-verify-a",
+      "url": "https://nimbus-verify-a-h7zuiuiwtq-uc.a.run.app",
+      "revision": "nimbus-verify-a-00001-6nx",
+      "image": "us-central1-docker.pkg.dev/adsc-nimbus/nimbus/nimbus@sha256:a593c5bd82815aa262258e198bdb61a81d2ffd8fff97411b80a8d9b0b1e25fc5"
+    },
+    {
+      "name": "nimbus-verify-b",
+      "url": "https://nimbus-verify-b-h7zuiuiwtq-uc.a.run.app",
+      "revision": "nimbus-verify-b-00001-g4r",
+      "image": "us-central1-docker.pkg.dev/adsc-nimbus/nimbus/nimbus@sha256:a593c5bd82815aa262258e198bdb61a81d2ffd8fff97411b80a8d9b0b1e25fc5"
+    }
+  ],
+  "isolation": true,
+  "teams": [
+    {
+      "service": "nimbus-verify-a",
+      "baseline": {
+        "p95": 0.8975211670040153,
+        "usd_per_month": 2092.3250000000007
+      },
+      "final": {
+        "p95": 0.8652191250002943,
+        "quality": {
+          "score_pct": 94.4,
+          "extraction_pct": 100.0,
+          "reasoning_pct": 83.3,
+          "hits": 34,
+          "total": 36,
+          "signature": "7f176bc92883693b4c9b4ff2a019fd2b7ba7de756c293e25223af82b89e5c323"
+        },
+        "recovery": {
+          "recovered": true,
+          "latency_ok": true,
+          "cost_ok": true,
+          "availability": 1.0,
+          "availability_ok": true,
+          "quality_ok": true,
+          "configuration_stable": true
+        }
+      },
+      "elapsed_s": 85.1
+    },
+    {
+      "service": "nimbus-verify-b",
+      "baseline": {
+        "p95": 1.9842779160026112,
+        "usd_per_month": 786.1999999999998
+      },
+      "final": {
+        "p95": 1.0598543330052053,
+        "quality": {
+          "score_pct": 97.2,
+          "extraction_pct": 100.0,
+          "reasoning_pct": 91.7,
+          "hits": 35,
+          "total": 36,
+          "signature": "f6f479095a30580f7588146c1cc437ee82b81dd6af6b4db79f3394747fac53e3"
+        },
+        "recovery": {
+          "recovered": true,
+          "latency_ok": true,
+          "cost_ok": true,
+          "availability": 1.0,
+          "availability_ok": true,
+          "quality_ok": true,
+          "configuration_stable": true
+        }
+      },
+      "elapsed_s": 89.4
+    }
+  ],
+  "elapsed_s": 174.5,
+  "passed": true
+}

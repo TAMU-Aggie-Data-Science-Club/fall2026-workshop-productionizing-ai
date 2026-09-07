@@ -38,7 +38,7 @@ that is itself an honest engineering trade.
 
 ## Wifi dies completely
 
-Use [`02_benchmark/paper_track.md`](../02_benchmark/paper_track.md). Tables can
+Use [`benchmark/paper_track.md`](../archive/paper_track.md). Tables can
 diagnose the incident and make the same configuration decisions from its fixed
 dashboard snapshots, then check the eval card. **This is a degraded session,
 not a cancelled one.**

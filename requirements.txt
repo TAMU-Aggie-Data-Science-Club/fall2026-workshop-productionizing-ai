@@ -58,3 +58,4 @@ cachetools==5.5.2
 pyasn1==0.6.1
 pyasn1-modules==0.4.2
 rsa==4.9
+setuptools==84.0.0

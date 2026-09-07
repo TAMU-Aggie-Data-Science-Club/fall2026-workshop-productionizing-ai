@@ -60,7 +60,7 @@ for i in range(TOTAL):
     else:
         rows.append({"question": TAIL[ti % len(TAIL)], "kind": "tail"}); ti += 1
 
-with open("02_benchmark/prompts.jsonl", "w") as f:
+with open("benchmark/prompts.jsonl", "w") as f:
     for r in rows:
         f.write(json.dumps(r) + "\n")
 

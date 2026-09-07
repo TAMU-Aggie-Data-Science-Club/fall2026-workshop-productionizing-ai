@@ -1,6 +1,6 @@
 """The incident catalog. NOT FOR PARTICIPANTS.
 
-01_deploy/incident.py holds the mechanism; this file holds the answers. The
+service/incident.py holds the mechanism; this file holds the answers. The
 split is the point: a participant with the whole repository checked out can read
 the mechanism and learn that a retrieval delay is possible, but not that theirs
 is one. Everything below reaches a running service as deploy-time environment
@@ -141,6 +141,7 @@ INCIDENTS = {
     },
 
     "decode": {
+        "room_enabled": False,  # experimental until failure AND recovery are verified
         "public_title": "Answers crawl to the end",
         "traffic": _CALM,
         "expect": {"signal": "tokens_out", "at_least_x": 3.0},
@@ -170,6 +171,7 @@ INCIDENTS = {
     },
 
     "upstream": {
+        "room_enabled": False,  # experimental until failure AND recovery are verified
         "public_title": "Intermittent failures",
         "traffic": _CALM,
         "expect": {"signal": "retries", "at_least": 3},
@@ -213,6 +215,7 @@ INCIDENTS = {
     },
 
     "staleness": {
+        "room_enabled": False,  # experimental until failure AND recovery are verified
         "public_title": "Wrong answers, healthy dashboards",
         "traffic": _CALM,
         "expect": {"infra_passes": True},
@@ -235,6 +238,7 @@ INCIDENTS = {
     },
 
     "cheapmodel": {
+        "room_enabled": False,  # experimental until failure AND recovery are verified
         "public_title": "Answers got shallow",
         "traffic": _CALM,
         "expect": {"infra_passes": True},

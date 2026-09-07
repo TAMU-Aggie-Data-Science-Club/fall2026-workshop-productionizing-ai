@@ -21,7 +21,7 @@ import os
 # ─── RUNTIME BACKEND ──────────────────────────────────────────────────────
 # Local mode keeps the original offline workshop path. The Docker Compose path
 # sets this to "ollama" and uses a locally running Llama model. Cloud Run sets
-# this to "google" and uses 01_deploy/cloud_model.py; the model weights are
+# this to "google" and uses service/cloud_model.py; the model weights are
 # never served by the Cloud Run container.
 MODEL_BACKEND = os.environ.get("NIMBUS_MODEL_BACKEND", "local")
 if MODEL_BACKEND not in {"local", "ollama", "google"}:

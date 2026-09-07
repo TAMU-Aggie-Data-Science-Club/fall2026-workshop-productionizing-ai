@@ -166,8 +166,38 @@ async def metrics(x_nimbus_admin_token: str | None = Header(default=None)) -> di
         "config": {k: getattr(config, k) for k in _CONFIG_KEYS},
         "runtime": (model.runtime_info() if hasattr(model, "runtime_info") else
                     {"provider": "local"}),
+        "deployment": {"service": os.environ.get("K_SERVICE", "local"),
+                       "revision": os.environ.get("K_REVISION", "local")},
         "cache": levers.cache_stats(),
     }
+
+
+@app.post("/verify-models")
+async def verify_models(x_nimbus_admin_token: str | None = Header(default=None)):
+    """Verify fixed model tiers without changing participant controls or caches.
+
+    Use the normal admission pool and adapter; this consumes provider requests.
+    It deliberately does not fabricate a hypothesis to get past the lever gate.
+    """
+    if not _admin_allowed(x_nimbus_admin_token):
+        return JSONResponse({"error": "team token required"}, status_code=401)
+    if _state["semaphore"] is None:
+        return JSONResponse({"error": "service is still starting"}, status_code=503)
+    results = {}
+    async with _state["semaphore"]:
+        prompt = "Explain Big-O notation briefly. It describes growth of running time with input size."
+        for tier in ("large", "small"):
+            stats = {}
+            try:
+                pieces = [part async for part in model.generate(
+                    tier, prompt, max(256, config.MAX_TOKENS), stats, None)]
+                text = "".join(pieces).strip()
+                results[tier] = {"ok": bool(text), "text": text,
+                                 "model": stats.get("model", ""),
+                                 "usage_source": stats.get("usage_source", "unknown")}
+            except Exception:
+                results[tier] = {"ok": False, "error": "model verification failed"}
+    return {"ok": all(r["ok"] for r in results.values()), "tiers": results}
 
 
 def _sse(obj: dict) -> str:
@@ -467,6 +497,8 @@ async def ask(body: Ask):
                         pieces.append(chunk)
                         yield _sse({"delta": chunk})
                 answer = "".join(pieces)
+                if not answer.strip():
+                    raise RuntimeError("generation returned no answer text")
                 levers.exact_put(prompt, answer)
                 levers.semantic_put(question, answer, qvec)
                 yield _trace(request_id, "generate", "complete", "Generate response",

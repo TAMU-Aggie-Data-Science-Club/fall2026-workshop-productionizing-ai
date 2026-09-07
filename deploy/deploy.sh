@@ -28,7 +28,7 @@ ADMIN_SECRET="${NIMBUS_ADMIN_SECRET:-nimbus-admin-token}"
 API_STYLE="${NIMBUS_GOOGLE_API_STYLE:-gemini}"
 MIN_INSTANCES="${NIMBUS_MIN_INSTANCES:-1}"
 MAX_INSTANCES="${NIMBUS_MAX_INSTANCES:-1}"
-CONCURRENCY="${NIMBUS_CONCURRENCY:-2}"
+CONCURRENCY="${NIMBUS_CONCURRENCY:-80}"
 # The app's admission limit must NOT default to Cloud Run's. They are different
 # controls and they have to differ: Cloud Run decides how many requests reach
 # the container, the app decides how many reach the model. If the platform limit
@@ -44,8 +44,8 @@ if [ "${CONCURRENCY}" -le "${APP_CONCURRENCY}" ]; then
 fi
 CPU="${NIMBUS_CPU:-1}"
 MEMORY="${NIMBUS_MEMORY:-1Gi}"
-IMAGE_TAG="${NIMBUS_IMAGE_TAG:-$(git rev-parse --short HEAD)}"
-IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${SERVICE}:${IMAGE_TAG}"
+IMAGE_TAG="${NIMBUS_IMAGE_TAG:-$(git rev-parse --short HEAD)-$(date -u +%Y%m%d%H%M%S)}"
+IMAGE="${NIMBUS_IMAGE:-${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/nimbus:${IMAGE_TAG}}"
 
 case "${PROJECT_ID}" in
   replace-with-*|"")
@@ -117,44 +117,32 @@ if [ -n "${NIMBUS_INCIDENT_PROVIDER_FAULT:-}" ]; then
   INCIDENT_ENV="${INCIDENT_ENV}@NIMBUS_INCIDENT_PROVIDER_FAULT=${NIMBUS_INCIDENT_PROVIDER_FAULT}"
 fi
 
-gcloud artifacts repositories describe "${REPOSITORY}" \
-  --project="${PROJECT_ID}" --location="${REGION}" >/dev/null 2>&1 || \
-gcloud artifacts repositories create "${REPOSITORY}" \
-  --project="${PROJECT_ID}" --location="${REGION}" \
-  --repository-format=docker --description="Nimbus workshop images"
-
-# Build once, deploy many. Twelve team services share one code revision, and
-# rebuilding the same image twelve times is about forty minutes of Cloud Build
-# for no change at all.
-#
-# The tag is the git SHA, which does NOT move when the working tree is dirty --
-# so an uncommitted edit would otherwise deploy a stale image that looks
-# correct. When the tree is dirty we always build; only a clean tree is allowed
-# to reuse an existing tag.
-TREE_STATE="clean"
-if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
-  TREE_STATE="dirty"
-fi
-
-SHOULD_BUILD=1
-if [ "${NIMBUS_FORCE_BUILD:-0}" = "1" ]; then
-  SHOULD_BUILD=1
-elif [ "${NIMBUS_SKIP_BUILD:-0}" = "1" ]; then
-  if [ "${TREE_STATE}" = "dirty" ]; then
-    echo "NIMBUS_SKIP_BUILD is set but the working tree has uncommitted changes;" >&2
-    echo "building anyway so the image matches the code you are looking at." >&2
-  else
-    SHOULD_BUILD=0
+# An explicit digest is the reviewed artifact, regardless of local tree state.
+# Otherwise build once under a unique tag and resolve it to an immutable digest.
+if [ -n "${NIMBUS_IMAGE:-}" ]; then
+  case "${IMAGE}" in
+    *@sha256:*) ;;
+    *) echo "NIMBUS_IMAGE must be an immutable @sha256 digest." >&2; exit 1 ;;
+  esac
+  gcloud artifacts docker images describe "${IMAGE}" --project="${PROJECT_ID}" >/dev/null
+else
+  if [ "${NIMBUS_SKIP_BUILD:-0}" = "1" ]; then
+    echo "NIMBUS_SKIP_BUILD requires an explicit NIMBUS_IMAGE digest." >&2
+    exit 1
   fi
-elif [ "${TREE_STATE}" = "clean" ] && gcloud artifacts docker images describe \
-       "${IMAGE}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
-  echo "Image ${IMAGE_TAG} already built and the tree is clean; reusing it."
-  echo "  (NIMBUS_FORCE_BUILD=1 to rebuild)"
-  SHOULD_BUILD=0
-fi
-
-if [ "${SHOULD_BUILD}" = "1" ]; then
+  gcloud artifacts repositories describe "${REPOSITORY}" \
+    --project="${PROJECT_ID}" --location="${REGION}" >/dev/null 2>&1 || \
+  gcloud artifacts repositories create "${REPOSITORY}" \
+    --project="${PROJECT_ID}" --location="${REGION}" --repository-format=docker
   gcloud builds submit . --project="${PROJECT_ID}" --tag="${IMAGE}"
+  DIGEST="$(gcloud artifacts docker images describe "${IMAGE}" \
+    --project="${PROJECT_ID}" --format='value(image_summary.digest)')"
+  case "${DIGEST}" in sha256:*) ;; *) echo "Image digest not returned" >&2; exit 1 ;; esac
+  IMAGE="${IMAGE%:*}@${DIGEST}"
+fi
+printf 'NIMBUS_IMAGE=%s\n' "${IMAGE}"
+if [ "${NIMBUS_BUILD_ONLY:-0}" = "1" ]; then
+  exit 0
 fi
 
 gcloud run deploy "${SERVICE}" \

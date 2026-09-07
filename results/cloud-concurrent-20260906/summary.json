@@ -1,0 +1,48 @@
+{
+  "teams": [
+    {
+      "service": "nimbus-verify-a",
+      "p95": 0.7788274999984424,
+      "quality": {
+        "score_pct": 94.4,
+        "extraction_pct": 100.0,
+        "reasoning_pct": 83.3,
+        "hits": 34,
+        "total": 36,
+        "signature": "7f176bc92883693b4c9b4ff2a019fd2b7ba7de756c293e25223af82b89e5c323"
+      },
+      "recovery": {
+        "recovered": true,
+        "latency_ok": true,
+        "cost_ok": true,
+        "availability": 1.0,
+        "availability_ok": true,
+        "quality_ok": true,
+        "configuration_stable": true
+      }
+    },
+    {
+      "service": "nimbus-verify-b",
+      "p95": 0.13566245899710339,
+      "quality": {
+        "score_pct": 97.2,
+        "extraction_pct": 100.0,
+        "reasoning_pct": 91.7,
+        "hits": 35,
+        "total": 36,
+        "signature": "f6f479095a30580f7588146c1cc437ee82b81dd6af6b4db79f3394747fac53e3"
+      },
+      "recovery": {
+        "recovered": true,
+        "latency_ok": true,
+        "cost_ok": true,
+        "availability": 1.0,
+        "availability_ok": true,
+        "quality_ok": true,
+        "configuration_stable": true
+      }
+    }
+  ],
+  "elapsed_s": 41.3,
+  "passed": true
+}

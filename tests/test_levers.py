@@ -21,7 +21,7 @@ os.environ.setdefault("NIMBUS_MODEL_BACKEND", "google")
 os.environ.setdefault("NIMBUS_ADMIN_TOKEN", "test-team-token")
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "01_deploy"))
+sys.path.insert(0, str(ROOT / "service"))
 sys.path.insert(0, str(ROOT))
 
 from fastapi.testclient import TestClient  # noqa: E402

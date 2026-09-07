@@ -27,6 +27,7 @@ import json
 import os
 import pathlib
 import shlex
+import secrets
 import subprocess
 import sys
 
@@ -49,6 +50,8 @@ def env_for(incident: str, service: str, require_hypothesis: bool) -> dict:
     spec = INCIDENTS[incident]
     env = {**HEALTHY_ENV, **spec["env"]}
     env["NIMBUS_SERVICE"] = service
+    team = service.removesuffix("-r1").removesuffix("-r2")
+    env["NIMBUS_ADMIN_SECRET"] = f"{team}-token"
     # The PUBLIC half of the incident travels with the deployment so the service
     # can serve it at /brief. The private truth stays here, with the facilitator.
     # public_title, never title: the internal names give the fault away.
@@ -70,6 +73,49 @@ def env_for(incident: str, service: str, require_hypothesis: bool) -> dict:
     return env
 
 
+def load_environment():
+    if not ENV_FILE.exists():
+        raise SystemExit("Create deploy/cloudrun.env from the example first.")
+    result = subprocess.run(["bash", "-c", 'set -a; source "$1"; env -0',
+        "bash", str(ENV_FILE)], capture_output=True, check=True)
+    return dict(item.decode().split("=", 1) for item in result.stdout.split(b"\0") if item)
+
+
+def ensure_team_secret(env):
+    project = env["GOOGLE_CLOUD_PROJECT"]
+    name = env["NIMBUS_ADMIN_SECRET"]
+    base = ["gcloud", "secrets"]
+    found = subprocess.run(base + ["describe", name, f"--project={project}"],
+                           capture_output=True)
+    if found.returncode:
+        subprocess.run(base + ["create", name, f"--project={project}",
+            "--replication-policy=automatic"], check=True, stdout=subprocess.DEVNULL)
+    versions = subprocess.run(base + ["versions", "list", name, f"--project={project}",
+        "--filter=state:ENABLED", "--limit=1", "--format=value(name)"],
+        capture_output=True, text=True, check=True)
+    if not versions.stdout.strip():
+        subprocess.run(base + ["versions", "add", name, f"--project={project}",
+            "--data-file=-"], input=secrets.token_urlsafe(32).encode(),
+            check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(base + ["add-iam-policy-binding", name, f"--project={project}",
+        f"--member=serviceAccount:{env['NIMBUS_RUNTIME_SERVICE_ACCOUNT']}",
+        "--role=roles/secretmanager.secretAccessor", "--condition=None"],
+        check=True, stdout=subprocess.DEVNULL)
+
+
+def build_image(env):
+    result = subprocess.run(["bash", str(DEPLOY)], cwd=ROOT,
+        env={**env, "NIMBUS_BUILD_ONLY": "1"}, stdout=subprocess.PIPE, text=True)
+    # Cloud Build progress remains on stderr. Only the digest is machine-read.
+    if result.returncode:
+        raise SystemExit("Image build failed; no team services deployed.")
+    image = next((line.partition("=")[2] for line in result.stdout.splitlines()
+                  if line.startswith("NIMBUS_IMAGE=")), None)
+    if not image or "@sha256:" not in image:
+        raise SystemExit("Build did not return an immutable image digest.")
+    return image
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -87,12 +133,15 @@ def main() -> None:
                     help="service name prefix when using --all")
     ap.add_argument("--no-gate", action="store_true",
                     help="leave the diagnose-first gate off (round 1)")
+    ap.add_argument("--include-experimental", action="store_true",
+                    help="allow incidents without a verified room recovery path")
     ap.add_argument("--run", action="store_true",
                     help="actually deploy; otherwise print the command")
     args = ap.parse_args()
 
     if args.all:
-        names = sorted(n for n, s in INCIDENTS.items() if s.get("round") == 2)
+        names = sorted(n for n, s in INCIDENTS.items() if s.get("round") == 2
+                       and (args.include_experimental or s.get("room_enabled", True)))
         count = args.teams or len(names)
         # More teams than incidents means duplicates, which is fine: neighbours
         # having different faults is what matters, not every fault being unique.
@@ -118,6 +167,14 @@ def main() -> None:
         sys.exit(f"unknown incident(s): {', '.join(unknown)}; "
                  f"have {', '.join(sorted(INCIDENTS))}")
 
+    if args.teams < 0 or args.teams > 26:
+        ap.error("--teams must be between 0 and 26")
+    experimental = [name for name, _ in targets if not INCIDENTS[name].get("room_enabled", True)]
+    if experimental and not args.include_experimental:
+        ap.error("Incidents need recovery validation: " + ", ".join(experimental) +
+                 ". Use --include-experimental only for facilitator validation.")
+    base_env = load_environment() if args.run else {}
+    image = build_image(base_env) if args.run else None
     card = []
     for index, (incident, service) in enumerate(targets):
         # Round 1 teaches everyone to read the panel on the same fault, so the
@@ -126,20 +183,16 @@ def main() -> None:
         gate = (not args.no_gate) and not service.endswith("-r1")
         env = env_for(incident, service, gate)
         assignment = " ".join(f"{k}={shlex.quote(v)}" for k, v in sorted(env.items()))
-        command = f"set -a; source {ENV_FILE}; set +a; {assignment} bash {DEPLOY}"
+        command = f"set -a; source {shlex.quote(str(ENV_FILE))}; set +a; {assignment} bash {shlex.quote(str(DEPLOY))}"
 
         print(f"\n=== {service}  <-  {incident} ===", flush=True)
         for key in sorted(env):
             print(f"  {key}={env[key]}")
 
         if args.run:
-            # The first deploy builds the image; the rest reuse it. Twelve
-            # services share one code revision, and Cloud Build takes about
-            # three minutes each time it is asked.
-            step_env = dict(os.environ)
-            if index > 0:
-                step_env["NIMBUS_SKIP_BUILD"] = "1"
-            result = subprocess.run(["bash", "-c", command], cwd=ROOT, env=step_env)
+            step_env = {**base_env, **env, "NIMBUS_IMAGE": image}
+            ensure_team_secret(step_env)
+            result = subprocess.run(["bash", str(DEPLOY)], cwd=ROOT, env=step_env)
             if result.returncode != 0:
                 sys.exit(f"{service}: deploy failed ({result.returncode})")
         else:
@@ -149,12 +202,12 @@ def main() -> None:
     if args.run and card:
         print("\n=== FACILITATOR CARD -- do not show participants ===")
         for service, incident in card:
-            gate = "" if service.endswith("-r1") else "  gate ON"
+            gate = "  gate OFF" if args.no_gate or service.endswith("-r1") else "  gate ON"
             print(f"  {service:<22} {incident:<12} "
                   f"{INCIDENTS[incident]['title']}{gate}")
-        print("\n  Team URLs come from the deploy output. The team token is the "
-              "nimbus-admin-token secret;\n  it is the same for every service, "
-              "so a team can reach another team's service if given the URL.")
+        print("\nEach team's token is in its own <team>-token Secret Manager secret.")
+        print(f"Shared immutable image: {image}")
+
 
 
 if __name__ == "__main__":

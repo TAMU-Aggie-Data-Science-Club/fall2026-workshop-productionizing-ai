@@ -1,0 +1,107 @@
+
+$ nimbus bench --label concurrent final validation
+warming the service (these requests are discarded)...
+sending 16 requests at 1.0/s (up to 2 at once)...
+
+NIMBUS BENCHMARK - run 1  concurrent final validation
+====================================================================
+requests     16 ok · 0 shed · 0 failed      duration  14.1 s
+throughput   1.1 req/s · 0 output tok/s
+
+latency      median     0.10 s
+             p95        0.14 s   SLO 1.50 s   PASS
+             slowest    0.15 s
+TTFT         p95        0.13 s
+             note: with 16 requests, "p95" is the 2nd-slowest
+             request, not a true percentile. Repeat runs vary ~12%.
+
+             ── where the time went ─────────────────────────────
+                      p95 req  p95 each
+  client + network     0.12 s         -  ████████████████████████
+  app queue wait       0.00 s     0.00s  ▏
+  cache lookup         0.01 s     0.03s  ██
+  retrieve             0.00 s         -  ▏
+  assemble             0.00 s         -  ▏
+  generate             0.00 s         -  ▏
+  other (app)          0.00 s         -  ▏
+                     --------
+  sum of rows          0.14 s   end-to-end 0.14 s · residual +0.0%
+
+             ── how the model behaved ───────────────────────────
+  provider retries        0           upstream status: none
+  provider           google
+
+             ── work per request ────────────────────────────────
+  input tokens            0 avg      baseline 226 · -100%
+  output tokens           0 avg      baseline 31 · -100%
+  cache hit rate       100%
+
+cost         $0.000 / 1k requests
+             $0 tokens + $140 Cloud Run estimate
+             $140 / month @ 150,000/day   budget $1,500   PASS
+
+--------------------------------------------------------------------
+VERDICT  2/2 constraints met
+availability 100% successful · PASS
+quality      NOT VERIFIED / FAIL
+RECOVERY     NOT PROVEN
+READ THIS FIRST
+  Largest contributor to the p95 request: CLIENT + NETWORK (91%).
+  Then: cache lookup 8%.
+  Below 1% of the budget: app queue wait, other (app), retrieve, assemble, generate.
+
+
+
+
+$ nimbus eval
+
+NIMBUS BENCHMARK - run 1  concurrent final validation
+====================================================================
+requests     16 ok · 0 shed · 0 failed      duration  14.1 s
+throughput   1.1 req/s · 0 output tok/s
+
+latency      median     0.10 s
+             p95        0.14 s   SLO 1.50 s   PASS
+             slowest    0.15 s
+TTFT         p95        0.13 s
+             note: with 16 requests, "p95" is the 2nd-slowest
+             request, not a true percentile. Repeat runs vary ~12%.
+
+             ── where the time went ─────────────────────────────
+                      p95 req  p95 each
+  client + network     0.12 s         -  ████████████████████████
+  app queue wait       0.00 s     0.00s  ▏
+  cache lookup         0.01 s     0.03s  ██
+  retrieve             0.00 s         -  ▏
+  assemble             0.00 s         -  ▏
+  generate             0.00 s         -  ▏
+  other (app)          0.00 s         -  ▏
+                     --------
+  sum of rows          0.14 s   end-to-end 0.14 s · residual +0.0%
+
+             ── how the model behaved ───────────────────────────
+  provider retries        0           upstream status: none
+  provider           google
+
+             ── work per request ────────────────────────────────
+  input tokens            0 avg      baseline 226 · -100%
+  output tokens           0 avg      baseline 31 · -100%
+  cache hit rate       100%
+
+cost         $0.000 / 1k requests
+             $0 tokens + $140 Cloud Run estimate
+             $140 / month @ 150,000/day   budget $1,500   PASS
+
+--------------------------------------------------------------------
+VERDICT  2/2 constraints met
+availability 100% successful · PASS
+quality      PASS
+RECOVERY     PASS
+READ THIS FIRST
+  Largest contributor to the p95 request: CLIENT + NETWORK (91%).
+  Then: cache lookup 8%.
+  Below 1% of the budget: app queue wait, other (app), retrieve, assemble, generate.
+
+Quality: 97.2% (35/36)
+
+

@@ -1,14 +1,14 @@
-"""Regenerate 02_benchmark/eval_card.md from measured eval results.
+"""Regenerate facilitators/generated/eval_card.md from measured eval results.
 
 The card used to contain invented numbers with two significant figures, which
 is exactly the sin the activity warns against. Now it is generated from
-facilitators/eval_results.json and says plainly how it was measured and what
+facilitators/generated/eval_results.json and says plainly how it was measured and what
 that measurement cannot see.
 """
 import json, pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-rows = json.loads((ROOT / "facilitators" / "eval_results.json").read_text())
+rows = json.loads((ROOT / "facilitators" / "generated" / "eval_results.json").read_text())
 bar = json.loads((ROOT / "scenario.json").read_text())["constraints"]["quality_bar_eval_pct"]
 
 lines = [
@@ -103,6 +103,6 @@ lines += [
     "> A model that is 95% right, wired into a system with no recovery path, fails "
     "5% of the time — spectacularly. The failure is the system, not the prediction.",
 ]
-out = ROOT / "02_benchmark" / "eval_card.md"
+out = ROOT / "facilitators" / "generated" / "eval_card.md"
 out.write_text("\n".join(lines) + "\n")
 print(f"wrote {out} from {len(rows)} measured configurations")

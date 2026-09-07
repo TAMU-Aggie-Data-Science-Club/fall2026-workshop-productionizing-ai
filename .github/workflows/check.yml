@@ -1,0 +1,15 @@
+name: Contributor checks
+on: [push, pull_request]
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m venv .venv
+      - run: .venv/bin/python -m pip install -r requirements.txt
+      - run: NIMBUS_ALLOW_MODEL_DOWNLOAD=1 .venv/bin/python data/build_index.py
+      - run: make check

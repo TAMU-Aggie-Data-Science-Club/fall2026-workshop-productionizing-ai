@@ -1,5 +1,8 @@
 .git
 .venv
+.venv-*
+.participant-venv
+.nimbus-runs
 __pycache__
 *.pyc
 results

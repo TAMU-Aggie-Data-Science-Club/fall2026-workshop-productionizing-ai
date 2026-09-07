@@ -9,7 +9,7 @@ import os, sys, pathlib
 # offline so a venue-network hiccup cannot distort a benchmark or stall a room.
 os.environ["NIMBUS_ALLOW_MODEL_DOWNLOAD"] = "1"
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "01_deploy"))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "service"))
 
 import model          # noqa: E402
 import embed          # noqa: E402  (importing it downloads the embedder)
