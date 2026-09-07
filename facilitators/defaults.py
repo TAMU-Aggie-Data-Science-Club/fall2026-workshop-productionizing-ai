@@ -10,7 +10,7 @@ session.
 import pathlib
 import re
 
-CONFIG = pathlib.Path(__file__).resolve().parents[1] / "01_deploy" / "config.py"
+CONFIG = pathlib.Path(__file__).resolve().parents[1] / "service" / "config.py"
 
 # Everything off or expensive. This IS the incident.
 DEFAULTS = {

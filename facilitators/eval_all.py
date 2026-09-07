@@ -6,7 +6,7 @@ of minutes. Restores shipping defaults on exit no matter how it ends.
 import json, os, pathlib, re, subprocess, sys, urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-CFG = ROOT / "01_deploy" / "config.py"
+CFG = ROOT / "service" / "config.py"
 PY = str(ROOT / ".venv" / "bin" / "python")
 ORIGINAL = CFG.read_text()
 URL = os.environ.get("NIMBUS_URL", "http://127.0.0.1:8000").rstrip("/")

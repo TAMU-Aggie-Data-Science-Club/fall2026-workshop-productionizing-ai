@@ -1,4 +1,4 @@
-"""Regenerate 02_benchmark/eval_card.md from measured eval results.
+"""Regenerate benchmark/eval_card.md from measured eval results.
 
 The card used to contain invented numbers with two significant figures, which
 is exactly the sin the activity warns against. Now it is generated from
@@ -103,6 +103,6 @@ lines += [
     "> A model that is 95% right, wired into a system with no recovery path, fails "
     "5% of the time — spectacularly. The failure is the system, not the prediction.",
 ]
-out = ROOT / "02_benchmark" / "eval_card.md"
+out = ROOT / "benchmark" / "eval_card.md"
 out.write_text("\n".join(lines) + "\n")
 print(f"wrote {out} from {len(rows)} measured configurations")

@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "01_deploy"))
+sys.path.insert(0, str(ROOT / "service"))
 sys.path.insert(0, str(ROOT / "facilitators"))
 
 import incident  # noqa: E402

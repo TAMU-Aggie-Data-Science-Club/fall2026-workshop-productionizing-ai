@@ -9,7 +9,7 @@ from unittest.mock import patch
 import httpx
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "01_deploy"))
+sys.path.insert(0, str(ROOT / "service"))
 
 import ollama_model  # noqa: E402
 

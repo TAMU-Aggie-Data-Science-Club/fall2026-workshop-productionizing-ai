@@ -34,8 +34,8 @@ import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "facilitators"))
-sys.path.insert(0, str(ROOT / "02_benchmark"))
-sys.path.insert(0, str(ROOT / "01_deploy"))
+sys.path.insert(0, str(ROOT / "benchmark"))
+sys.path.insert(0, str(ROOT / "service"))
 
 import config                                    # noqa: E402
 from incidents import (HEALTHY_ENV, HEALTHY_TRAFFIC, INCIDENTS,  # noqa: E402
@@ -224,7 +224,7 @@ def _serve(env_overrides: dict, port: int):
     env = {**os.environ, **env_overrides, "PORT": str(port)}
     proc = subprocess.Popen(
         [str(ROOT / ".venv" / "bin" / "uvicorn"), "app:app",
-         "--app-dir", "01_deploy", "--host", "127.0.0.1", "--port", str(port)],
+         "--app-dir", "service", "--host", "127.0.0.1", "--port", str(port)],
         cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     return proc
 

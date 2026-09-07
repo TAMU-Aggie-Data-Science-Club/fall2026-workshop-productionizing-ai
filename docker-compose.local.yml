@@ -73,7 +73,7 @@ services:
       start_period: 10s
     volumes:
       # Keep the workshop control panel editable without rebuilding the image.
-      - ./01_deploy/config.py:/app/01_deploy/config.py:ro
+      - ./service/config.py:/app/service/config.py:ro
       - ./results:/app/results
 
 volumes:
