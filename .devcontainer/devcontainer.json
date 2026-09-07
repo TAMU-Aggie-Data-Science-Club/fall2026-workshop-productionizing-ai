@@ -6,7 +6,7 @@
 
   "// setup": "Everything expensive happens at image build time, so the room is not",
   "// setup2": "waiting on pip or on a model download during the activity.",
-  "onCreateCommand": "make setup && .venv/bin/python .devcontainer/prefetch.py",
+  "onCreateCommand": "make setup PYTHON=python3.11",
 
   "forwardPorts": [8000],
   "portsAttributes": {

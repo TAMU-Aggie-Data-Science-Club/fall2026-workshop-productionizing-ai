@@ -20,9 +20,14 @@ import json
 import os
 import pathlib
 import sys
+import subprocess
+import uuid
+from datetime import datetime, timezone
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "02_benchmark"))
+sys.path.insert(0, str(ROOT / "benchmark"))
+
+from run_context import context, run_directory, next_run, config_signature
 
 CONFIG = pathlib.Path(os.path.expanduser("~/.nimbus.json"))
 SCENARIO = json.loads((ROOT / "scenario.json").read_text())
@@ -33,7 +38,8 @@ def _load():
     env_url = os.environ.get("NIMBUS_URL")
     env_token = os.environ.get("NIMBUS_TOKEN") or os.environ.get("NIMBUS_ADMIN_TOKEN")
     if env_url:
-        return {"url": env_url.rstrip("/"), "token": env_token or ""}
+        return {"url": env_url.rstrip("/"), "token": env_token or "",
+                "session": os.environ.get("NIMBUS_SESSION", "default")}
     if CONFIG.exists():
         return json.loads(CONFIG.read_text())
     sys.exit("Run `nimbus init <url> <token>` first "
@@ -65,7 +71,8 @@ def _http(path, method="GET", body=None, token=None):
 
 def cmd_init(args):
     CONFIG.write_text(json.dumps({"url": args.url.rstrip("/"),
-                                  "token": args.token}, indent=2))
+                                  "token": args.token, "session": args.session or uuid.uuid4().hex}, indent=2))
+    CONFIG.chmod(0o600)
     print(f"Pointed at {args.url}")
     status, body = _http("/health")
     if status == 200 and body.get("ok"):
@@ -126,6 +133,11 @@ def _run_benchmark(label, requests, rate, concurrency):
     from report import render
     cfg = _load()
     url = cfg["url"]
+    if requests < 1 or rate <= 0 or concurrency < 1:
+        sys.exit("requests/concurrency must be positive integers and rate must be positive")
+    status, metrics = _http("/metrics")
+    if status != 200:
+        sys.exit("Benchmark needs authenticated /metrics to record the actual configuration.")
     questions = [bench.PROMPTS[i % len(bench.PROMPTS)]["question"]
                  for i in range(requests)]
     print("warming the service (these requests are discarded)...", flush=True)
@@ -136,18 +148,31 @@ def _run_benchmark(label, requests, rate, concurrency):
     results, duration = asyncio.run(
         bench.drive(url, questions, rate, concurrency))
 
-    STATE.mkdir(exist_ok=True)
-    run_no = len(list(STATE.glob("run-*.json"))) + 1
-    payload = {"run": run_no, "label": label, "duration_s": duration, "args": {},
-               "server_config": {}, "server_runtime": {"provider": "google"},
+    directory = _run_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    run_no = next_run(directory)
+    status, after = _http("/metrics")
+    traffic = {"requests": requests, "rate": rate, "concurrency": concurrency}
+    payload = {"run": run_no, "label": label, "duration_s": duration, "args": traffic,
+               "created_at": datetime.now(timezone.utc).isoformat(),
+               "server_config": metrics["config"], "server_runtime": metrics["runtime"],
+               "context": context(url, cfg.get("session", "default"), traffic, metrics),
+               "config_signature": config_signature(metrics),
+               "configuration_stable": status == 200 and config_signature(after) == config_signature(metrics),
                "results": results}
-    (STATE / f"run-{run_no}.json").write_text(json.dumps(payload))
-    print(render(payload, SCENARIO, STATE))
+    with (directory / f"run-{run_no}.json").open("x") as f:
+        json.dump(payload, f, indent=2)
+    print(render(payload, SCENARIO, directory))
     return payload
 
 
+def _run_dir():
+    cfg = _load()
+    return run_directory(STATE, cfg["url"], cfg.get("session", "default"))
+
+
 def cmd_baseline(args):
-    if STATE.exists() and list(STATE.glob("run-*.json")):
+    if _run_dir().exists() and list(_run_dir().glob("run-*.json")):
         print("You already have a baseline. Use `nimbus bench` to measure again.\n")
     d = _traffic()
     print("\n  BASELINE — change nothing yet.\n"
@@ -179,14 +204,15 @@ def cmd_bench(args):
 
 
 def cmd_diagnose(args):
-    runs = sorted(STATE.glob("run-*.json"),
-                  key=lambda p: int(p.stem.split("-")[1])) if STATE.exists() else []
+    directory = _run_dir()
+    runs = sorted(directory.glob("run-*.json"),
+                  key=lambda p: int(p.stem.split("-")[1])) if directory.exists() else []
     if not runs:
         sys.exit("No runs yet. Start with `nimbus baseline`.")
     from report import render, summarise
     payload = json.loads(runs[-1].read_text())
     s = summarise(payload, SCENARIO)
-    print(render(payload, SCENARIO, STATE))
+    print(render(payload, SCENARIO, directory))
     ledger = s["ledger"]
     total = sum(ledger.values()) or 1.0
     ranked = sorted(ledger.items(), key=lambda kv: kv[1], reverse=True)
@@ -236,6 +262,37 @@ def cmd_set(args):
     print("\nMeasure again:  nimbus bench --label 'what you changed'")
 
 
+def cmd_eval(args):
+    directory = _run_dir()
+    runs = sorted(directory.glob("run-*.json"), key=lambda p: int(p.stem.split("-")[1]))
+    if not runs:
+        sys.exit("Run a benchmark before evaluating recovery.")
+    path = runs[-1]
+    payload = json.loads(path.read_text())
+    status, metrics = _http("/metrics")
+    if status != 200 or config_signature(metrics) != payload.get("config_signature"):
+        sys.exit("Service configuration changed; benchmark it again before evaluating quality.")
+    cfg = _load()
+    # Pass credentials through the environment, never process arguments or artifacts.
+    result = subprocess.run([sys.executable, str(ROOT / "facilitators" / "eval.py"),
+        "--url", cfg["url"]], env={**os.environ, "NIMBUS_ADMIN_TOKEN": cfg.get("token", "")},
+        capture_output=True, text=True)
+    if result.returncode:
+        sys.exit("Quality evaluation failed; recovery remains unverified.")
+    quality = json.loads(result.stdout)
+    status, after = _http("/metrics")
+    if status != 200 or config_signature(after) != payload["config_signature"]:
+        sys.exit("Configuration changed during evaluation; repeat benchmark and quality checks.")
+    payload["quality"] = {k: quality[k] for k in ("score_pct", "extraction_pct", "reasoning_pct", "hits", "total")}
+    payload["quality"]["signature"] = payload["config_signature"]
+    path.write_text(json.dumps(payload, indent=2))
+    from report import render, recovery
+    print(render(payload, SCENARIO, directory))
+    print(f"Quality: {quality['score_pct']}% ({quality['hits']}/{quality['total']})")
+    if not recovery(payload, SCENARIO)["recovered"]:
+        sys.exit(1)
+
+
 def cmd_status(args):
     status, body = _http("/metrics")
     if status == 401:
@@ -256,10 +313,12 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
 
     i = sub.add_parser("init"); i.add_argument("url"); i.add_argument("token")
+    i.add_argument("--session", help="explicit session name; default starts a new session")
     i.set_defaults(func=cmd_init)
 
     sub.add_parser("brief").set_defaults(func=cmd_brief)
     sub.add_parser("status").set_defaults(func=cmd_status)
+    sub.add_parser("eval").set_defaults(func=cmd_eval)
 
     for name, fn in (("baseline", cmd_baseline), ("bench", cmd_bench)):
         b = sub.add_parser(name)

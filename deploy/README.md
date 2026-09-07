@@ -1,150 +1,106 @@
-# Nimbus on Cloud Run
+# Deploy and verify Nimbus on Cloud Run
 
-Nimbus already contains the backend proxy needed for the cloud deployment:
+The supported room uses one single-instance service per team, a shared immutable
+image, and a distinct token per team. Current round-2 assignments are prompt and
+retrieval. Decode, upstream, cheapmodel and staleness require
+`--include-experimental` because their recovery/quality story is not yet proven.
+See [development decisions](../docs/DEVELOPMENT_LOG.md) and the live evidence recorded there.
 
-```text
-participant browser -> Cloud Run FastAPI -> retrieval/cache/queue
-                    -> Google managed model API -> streamed answer
-```
+## Prerequisites
 
-There is no second proxy to deploy. Keeping the proxy in this repository is
-important because it protects the model credential, performs course-note
-retrieval, controls concurrency, exposes timing data, and gives the workshop a
-single place to enforce request limits.
+Use Python 3.11, Git, and gcloud authenticated to the workshop project. The project
+needs billing and the Cloud Run, Cloud Build, Artifact Registry, Vertex AI and
+Secret Manager APIs. The runtime service account needs Vertex AI access. The
+operator needs permissions to build/push images, deploy services as that account,
+and create team secrets and grant secret access. Check the actual Cloud Build
+identity and its storage-read, artifact-write and logging permissions.
 
-## What the cloud owner must provide
-
-1. A Google Cloud project with billing enabled and a budget alert.
-2. APIs enabled for Cloud Run, Cloud Build, Artifact Registry, Vertex AI, and
-   Secret Manager.
-3. A user-managed runtime service account. Grant it:
-   - `roles/aiplatform.user` on the project;
-   - `roles/secretmanager.secretAccessor` on the `nimbus-admin-token` secret.
-4. Mistral model access enabled in Model Garden, in the same region used by
-   Cloud Run. The default `mistral-small-2503` is currently listed for
-   `us-central1` and `europe-west4`.
-5. A Secret Manager secret containing a random admin token. It protects
-   `/metrics` and `/reload`; it is not used by participants.
-6. A deployer identity with Cloud Run deploy, Artifact Registry write/build,
-   service-account-use, and the required Cloud Build permissions.
-7. **Build permissions for the Cloud Build runner.** Projects created from
-   about 2024 onward no longer grant the Compute Engine default service
-   account any roles, and Cloud Build runs as that account by default. Without
-   the grant below `gcloud builds submit` fails at the *first* step, before any
-   build output, with:
-
-   ```text
-   ERROR: could not resolve source: ... does not have storage.objects.get
-   access to the Google Cloud Storage object
-   ```
-
-   Least-privilege fix — three roles, nothing that can deploy or read secrets:
-
-   ```bash
-   SA="$(gcloud projects describe "$GOOGLE_CLOUD_PROJECT" \
-        --format='value(projectNumber)')-compute@developer.gserviceaccount.com"
-   for role in roles/logging.logWriter \
-               roles/artifactregistry.writer \
-               roles/storage.objectViewer; do
-     gcloud projects add-iam-policy-binding "$GOOGLE_CLOUD_PROJECT" \
-       --member="serviceAccount:${SA}" --role="$role" --condition=None
-   done
-   ```
-
-   `roles/cloudbuild.builds.builder` is the commonly documented single-role
-   alternative; it also works and grants rather more.
-
-No service-account JSON key, API key, or admin token should be added to this
-repository. Cloud Run uses Application Default Credentials from its runtime
-service account.
-
-## Deploy
-
-Copy the example variables into a local, ignored env file, fill in the project
-and service-account values, then run:
+Copy `cloudrun.env.example` to the ignored `cloudrun.env` and fill in project,
+region and runtime identity. Do not overwrite an existing configured file.
+The incident helper loads and exports it automatically. For direct shell commands:
 
 ```bash
-cp deploy/cloudrun.env.example deploy/cloudrun.env
+set -a
 source deploy/cloudrun.env
-bash deploy/deploy.sh
+set +a
 ```
 
-The script builds the image with Cloud Build, creates the Artifact Registry
-repository if necessary, deploys one Cloud Run service, and prints its URL.
-The image builds the small local embedding/index artifact; LLM inference stays
-on the managed Google endpoint, so the Cloud Run instance does not need a GPU.
-
-The default shape is one 1-vCPU/1-GiB instance with concurrency 2 and max
-instances 1. This is a starting point for 10–20 participants, not a permanent
-capacity claim. Increase `NIMBUS_MAX_INSTANCES` only after measuring queue wait
-and checking the budget. Set `NIMBUS_MIN_INSTANCES=0` outside the live session
-to reduce idle cost.
-
-The service is intentionally public so participants can use a browser without
-Google accounts. Keep this deployment limited to the workshop, retain the
-budget alert, and put Cloud Armor or an identity-aware access layer in front of
-it before using the same pattern for an untrusted or long-lived application.
-
-## Verify
+## Preview, then deploy
 
 ```bash
-export NIMBUS_URL='https://...run.app'
-export NIMBUS_ADMIN_TOKEN='the-value-from-secret-manager'
-curl -fsS "$NIMBUS_URL/health"
-make metrics
-make bench URL="$NIMBUS_URL"
+.venv/bin/python facilitators/deploy_incident.py --all --teams 2 --prefix nimbus-team
+.venv/bin/python facilitators/deploy_incident.py --all --teams 2 --prefix nimbus-team --run
 ```
 
-The benchmark never writes `NIMBUS_ADMIN_TOKEN` to its result JSON. If the
-managed provider does not include usage in a streaming response, the report
-marks the cost verdict as unknown instead of treating zero tokens as free.
+Without `--run`, the helper only previews. With `--run`, it builds once, resolves
+the digest, creates/reuses `<team>-token` secrets, grants the runtime identity
+access, and deploys every target using that same digest. Tokens are generated in
+memory and passed to Secret Manager through stdin; they are not printed.
+`--rounds` creates separate round-1 queue and round-2 services for each team,
+sharing only that team's credential. This doubles the instance count.
 
-## Model choice
+To reuse a previously reviewed artifact, export `NIMBUS_IMAGE` as its complete
+`.../nimbus@sha256:...` reference before calling the helper. Mutable tags are
+rejected for explicit reuse. This intentionally permits deploying an already
+reviewed digest while local documentation or development files are dirty.
 
-**Verify the model with a real request before the session.** `warm()` validates
-credentials, not model access, so a service configured with a model the project
-cannot reach starts up *healthy* and then fails every `/ask` with a 404. On
-`adsc-nimbus`, `mistral-small-2503` is exactly this case: it returns 404 in both
-`us-central1` and `global` because Model Garden access was never granted.
+For a single incident:
 
-The workshop therefore runs on Gemini, with two real tiers:
+```bash
+.venv/bin/python facilitators/deploy_incident.py --incident retrieval --service nimbus-team-a --run
+```
 
-| Setting | Value |
-| --- | --- |
-| `NIMBUS_GOOGLE_API_STYLE` | `gemini` |
-| `NIMBUS_GOOGLE_MODEL_SMALL` | `gemini-2.5-flash-lite` |
-| `NIMBUS_GOOGLE_MODEL_LARGE` | `gemini-2.5-flash` |
-| `NIMBUS_GEMINI_THINKING_BUDGET` | `0` |
+`--no-gate` is for facilitator calibration/round 1. Round-2 services default to a
+required hypothesis. Do not build images during participant investigations.
 
-Leave `NIMBUS_GOOGLE_MODEL_ID` **unset**. It pins both tiers to a single model,
-which silently removes routing as a lever.
+## Readiness and rehearsal
 
-`NIMBUS_GEMINI_THINKING_BUDGET=0` is not a tuning preference. Gemini 2.5 spends
-the *output* token budget thinking before it answers, so at the workshop default
-of `MAX_TOKENS=32` the model returns `finishReason=MAX_TOKENS` with **no text at
-all** and `thoughtsTokenCount=29` — every answer empty, while latency and cost
-still read as perfectly healthy. Use `none` to omit the field entirely, which
-`gemini-2.5-pro` requires because it refuses a zero budget.
+```bash
+.venv/bin/python facilitators/preflight.py --all-services --prefix nimbus-team-
+```
 
-The `decode` incident intentionally overrides the large tier to
-`gemini-2.5-pro`, uses its minimum explicit thinking budget of `128`, and
-selects the `VERBOSE` system prompt so output work is measurably the
-bottleneck. Pro cannot disable thinking; if it receives the old zero-budget
-default, the adapter omits that field and lets Pro use automatic thinking.
+Preflight resolves each service's own token through gcloud. It requires the Google
+backend, authenticated metrics, nonempty real answers, provider usage, and the
+actual model ID for each tier. `POST /verify-models` checks both adapters without
+changing levers or declarations; normal `/ask` is checked separately. Missing
+credentials or an untested model cannot produce a ready verdict. These calls
+consume provider requests. A preflight is a readiness check, not incident recovery.
 
+For the bounded automated rehearsal, deploy two fresh services with prefix
+`nimbus-verify`, then run:
 
+```bash
+.venv/bin/python facilitators/verify_cloud.py --prefix nimbus-verify
+```
 
-The adapter defaults to Google’s managed `mistral-small-2503` endpoint in
-`us-central1`, and the model ID is configurable. The current Google pricing
-page lists Mistral Small 3.1 at $0.10 per 1M input tokens and $0.30 per 1M
-output tokens; `scenario.json` contains those rates as an auditable workshop
-assumption. Verify availability and pricing with the cloud owner immediately
-before the event. Do not hard-code a retiring model as the only fallback;
-changing `NIMBUS_GOOGLE_MODEL_ID` should not require a source or credential
-change.
+This verifies the shared digest, distinct tokens, cross-team rejection, and the
+409 hypothesis gate, then executes actual CLI baseline/diagnose/hypothesis/set/
+bench/eval commands for prompt and retrieval. It writes sanitized deployment
+metadata, CLI transcripts and raw measurements under `results/<session>/`.
+It fails unless both recover and the scripted investigation fits twenty minutes.
+A scripted rehearsal does not measure how long human participants need to reason.
 
-The default `mistral` API style calls the publisher `streamRawPredict` endpoint
-with the Mistral model ID. The optional `openai` style is for a compatible
-OpenAI endpoint and requires an explicit `NIMBUS_GOOGLE_MODEL_ID` (for example,
-the provider-qualified model ID documented by Google); it is not the default
-path for managed Mistral.
+## Runtime boundaries and operations
+
+- Cloud Run concurrency is 80; application concurrency is independently configured.
+  The queue exercise needs platform admission above application admission.
+- One worker, minimum one instance and maximum one instance during the workshop.
+  Levers, caches, counters and declarations live in process memory and reset on
+  replacement. Raising instance count requires a shared-state design first.
+- Model generation uses runtime ADC; no service-account key belongs in the image.
+  Course-note retrieval and embeddings are local to the container.
+- Team HTTP credentials differ, but the shared runtime service account can access
+  the secrets granted to it. Separate runtime identities are a future isolation step.
+- `/ask` and the browser remain public. The token protects control/readiness
+  endpoints; this is a controlled workshop, not a general public service.
+- `nimbus eval` binds the existing 36-case keyword quality proxy to the latest
+  benchmark configuration. Recovery requires quality, availability, latency and
+  modeled cost; green latency/cost alone is insufficient.
+- After the session, preserve artifacts and deliberately scale minimum instances
+  to zero or remove temporary services. Minimum instances incur idle charges.
+  Secret cleanup and image retention are separate operator decisions.
+
+Changing a lever is fast and temporary. Changing an image/provider configuration
+creates a revision. `/reload` rereads the container's configuration; it cannot
+apply source edits made only on your laptop. Do not use the local `eval_all.py`
+config-patching workflow to claim remote configurations changed.

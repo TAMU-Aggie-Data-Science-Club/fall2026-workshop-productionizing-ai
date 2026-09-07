@@ -1,0 +1,38 @@
+[
+  {
+    "service": "nimbus-verify-a",
+    "url": "https://nimbus-verify-a-h7zuiuiwtq-uc.a.run.app",
+    "revision": "nimbus-verify-a-00001-6nx",
+    "image": "us-central1-docker.pkg.dev/adsc-nimbus/nimbus/nimbus@sha256:a593c5bd82815aa262258e198bdb61a81d2ffd8fff97411b80a8d9b0b1e25fc5",
+    "min_instances": "0",
+    "max_instances": "1",
+    "ready": "True"
+  },
+  {
+    "service": "nimbus-verify-b",
+    "url": "https://nimbus-verify-b-h7zuiuiwtq-uc.a.run.app",
+    "revision": "nimbus-verify-b-00001-g4r",
+    "image": "us-central1-docker.pkg.dev/adsc-nimbus/nimbus/nimbus@sha256:a593c5bd82815aa262258e198bdb61a81d2ffd8fff97411b80a8d9b0b1e25fc5",
+    "min_instances": "0",
+    "max_instances": "1",
+    "ready": "True"
+  },
+  {
+    "service": "nimbus-verify-queue",
+    "url": "https://nimbus-verify-queue-h7zuiuiwtq-uc.a.run.app",
+    "revision": "nimbus-verify-queue-00001-xk5",
+    "image": "us-central1-docker.pkg.dev/adsc-nimbus/nimbus/nimbus@sha256:a593c5bd82815aa262258e198bdb61a81d2ffd8fff97411b80a8d9b0b1e25fc5",
+    "min_instances": "0",
+    "max_instances": "1",
+    "ready": "True"
+  },
+  {
+    "service": "nimbus-eval",
+    "url": "https://nimbus-eval-h7zuiuiwtq-uc.a.run.app",
+    "revision": "nimbus-eval-00001-2lf",
+    "image": "us-central1-docker.pkg.dev/adsc-nimbus/nimbus/nimbus-eval:9caa0d7",
+    "min_instances": "1",
+    "max_instances": "1",
+    "ready": "True"
+  }
+]

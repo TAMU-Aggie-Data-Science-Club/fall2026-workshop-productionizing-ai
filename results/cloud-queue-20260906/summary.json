@@ -1,0 +1,28 @@
+{
+  "target": {
+    "name": "nimbus-verify-queue",
+    "url": "https://nimbus-verify-queue-h7zuiuiwtq-uc.a.run.app",
+    "revision": "nimbus-verify-queue-00001-xk5",
+    "image": "us-central1-docker.pkg.dev/adsc-nimbus/nimbus/nimbus@sha256:a593c5bd82815aa262258e198bdb61a81d2ffd8fff97411b80a8d9b0b1e25fc5"
+  },
+  "baseline_p95": 5.757823084000847,
+  "final_p95": 1.0617575829965062,
+  "quality": {
+    "score_pct": 94.4,
+    "extraction_pct": 100.0,
+    "reasoning_pct": 83.3,
+    "hits": 34,
+    "total": 36,
+    "signature": "53be267ff45e95e58ee7f3903fed209297bc56841208ca6b11678a3d9d84189c"
+  },
+  "recovery": {
+    "recovered": true,
+    "latency_ok": true,
+    "cost_ok": true,
+    "availability": 1.0,
+    "availability_ok": true,
+    "quality_ok": true,
+    "configuration_stable": true
+  },
+  "elapsed_s": 55.4
+}

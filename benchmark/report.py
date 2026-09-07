@@ -16,6 +16,7 @@ participant's job and the whole point of the exercise.
 import json
 import os
 import pathlib
+from run_context import compatible
 
 # The components of one request's wall clock, in the order they occur.
 # Rows sum back to end-to-end latency; a component that never sums is a missing
@@ -88,9 +89,12 @@ def _residual(total_ms: float, latency_ms: float) -> str:
     return f"{(total_ms - latency_ms) / latency_ms * 100:+.1f}%"
 
 
-def _baseline(scenario: dict, key: str):
+def _baseline(scenario: dict, key: str, provider=None):
     """A calibrated 'normal' value, or None if this hardware was never measured."""
-    return (scenario.get("baselines", {}).get("default", {}) or {}).get(key)
+    baseline = scenario.get("baselines", {})
+    if baseline.get("_backend") and baseline["_backend"] != provider:
+        return None
+    return (baseline.get("default", {}) or {}).get(key)
 
 
 def _versus(value: float, base, unit: str = "", tol: float = 0.15) -> str:
@@ -261,6 +265,25 @@ def summarise(payload: dict, scenario: dict) -> dict:
     }
 
 
+def recovery(payload, scenario):
+    s = summarise(payload, scenario)
+    c = scenario["constraints"]
+    total = len(payload["results"])
+    availability = s["ok"] / total if total else 0.0
+    minimum = c.get("minimum_success_rate", 1.0)
+    quality = payload.get("quality")
+    quality_ok = bool(quality and quality.get("signature") == payload.get("config_signature")
+                      and payload.get("config_signature")
+                      and quality.get("score_pct", 0) >= c.get("quality_bar_eval_pct", 80))
+    latency_ok = s["ok"] > 0 and s["p95"] <= c["slo_p95_latency_s"]
+    cost_ok = s["usd_per_month"] is not None and s["usd_per_month"] <= c["budget_usd_per_month"]
+    stable = payload.get("configuration_stable", False)
+    return {"recovered": bool(stable and latency_ok and cost_ok and availability >= minimum and quality_ok),
+            "latency_ok": latency_ok, "cost_ok": cost_ok,
+            "availability": availability, "availability_ok": availability >= minimum,
+            "quality_ok": quality_ok, "configuration_stable": stable}
+
+
 def render(payload: dict, scenario: dict, results_dir: pathlib.Path) -> str:
     s = summarise(payload, scenario)
     c = scenario["constraints"]
@@ -285,12 +308,13 @@ def render(payload: dict, scenario: dict, results_dir: pathlib.Path) -> str:
     prev = None
     prev_path = results_dir / f"run-{payload['run'] - 1}.json"
     if prev_path.exists():
-        candidate = summarise(json.loads(prev_path.read_text()), scenario)
+        previous_payload = json.loads(prev_path.read_text())
+        candidate = summarise(previous_payload, scenario)
         # A run with no successful requests has percentiles of 0.0 and a cost of
         # nothing, so quoting it as "the previous result" presents a completely
         # broken deployment as the number to beat. Same trap the verdict guard
         # below exists for -- it just also has to apply to the comparison.
-        prev = candidate if candidate["ok"] > 0 else None
+        prev = candidate if candidate["ok"] > 0 and compatible(payload, previous_payload) else None
 
     def mark(ok: bool, marginal: bool = False) -> str:
         if marginal:
@@ -360,9 +384,9 @@ def render(payload: dict, scenario: dict, results_dir: pathlib.Path) -> str:
     # ── work per request ─────────────────────────────────────────────────
     L.append("             ── work per request ────────────────────────────────")
     L.append(f"  {'input tokens':<{W}}{s['tokens_in_mean']:8,.0f} avg      "
-             f"{_versus(s['tokens_in_mean'], _baseline(scenario, 'tokens_in'))}")
+             f"{_versus(s['tokens_in_mean'], _baseline(scenario, 'tokens_in', s['provider']))}")
     L.append(f"  {'output tokens':<{W}}{s['tokens_out_mean']:8,.0f} avg      "
-             f"{_versus(s['tokens_out_mean'], _baseline(scenario, 'tokens_out'))}")
+             f"{_versus(s['tokens_out_mean'], _baseline(scenario, 'tokens_out', s['provider']))}")
     L.append(f"  {'cache hit rate':<{W}}{s['cache_hit_rate']*100:7.0f}%")
     if s["input_tokens"]:
         share = s["prefix_cached_tokens"] / s["input_tokens"] * 100
@@ -404,6 +428,11 @@ def render(payload: dict, scenario: dict, results_dir: pathlib.Path) -> str:
         verdict += (f"      (run {prev['run']}: p95 {prev['p95']:.2f}s, "
                     f"{previous_cost})")
     L.append(verdict)
+    recovery_state = recovery(payload, scenario)
+    L.append(f"availability {recovery_state['availability']:.0%} successful · "
+             f"{'PASS' if recovery_state['availability_ok'] else 'FAIL'}")
+    L.append("quality      " + ("PASS" if recovery_state["quality_ok"] else "NOT VERIFIED / FAIL"))
+    L.append("RECOVERY     " + ("PASS" if recovery_state["recovered"] else "NOT PROVEN"))
 
     if not healthy:
         L.append("hint     every request failed. Is the service running, and on this port?")
@@ -446,7 +475,7 @@ def _read_this_first(s: dict, scenario: dict) -> list[str]:
     steady = []
     for value, key in ((s["tokens_in_mean"], "tokens_in"),
                        (s["tokens_out_mean"], "tokens_out")):
-        base = _baseline(scenario, key)
+        base = _baseline(scenario, key, s["provider"])
         if base and abs(value - base) / base <= 0.15:
             steady.append(key.replace("_", " "))
     if steady:

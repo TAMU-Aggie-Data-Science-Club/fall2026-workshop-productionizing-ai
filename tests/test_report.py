@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "02_benchmark"))
+sys.path.insert(0, str(ROOT / "benchmark"))
 
 import report  # noqa: E402
 
@@ -56,7 +56,7 @@ if __name__ == "__main__":
 
 def _row(latency_s, queue_ms, stages, tokens_in=1480, tokens_out=32,
          retries=0, status=None, overhead_ms=20.0):
-    """One benchmark result row shaped exactly as 02_benchmark/run.py writes it."""
+    """One benchmark result row shaped exactly as benchmark/run.py writes it."""
     return {
         "ok": True, "shed": False,
         "latency_s": latency_s,
@@ -75,7 +75,9 @@ def _row(latency_s, queue_ms, stages, tokens_in=1480, tokens_out=32,
 def _payload(rows, run=1, **over):
     payload = {"run": run, "label": "", "duration_s": 10.0, "args": {},
                "server_config": {"REPLICAS": 1},
-               "server_runtime": {"provider": "local"}, "results": rows}
+               "server_runtime": {"provider": "local"}, "results": rows,
+               "context": {"url": "http://test", "session": "test",
+                           "traffic": {"requests": 16, "rate": 4, "concurrency": 8}}}
     payload.update(over)
     return payload
 

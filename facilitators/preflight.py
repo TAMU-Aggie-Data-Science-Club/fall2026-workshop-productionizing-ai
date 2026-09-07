@@ -66,79 +66,75 @@ def _ask(url, question, max_tokens=None):
     return "".join(text), stats, error
 
 
-def check(url: str, token: str) -> list[str]:
-    """Return a list of problems. Empty means good to hand out."""
-    problems = []
+def _post(url, token, body=None):
+    req = urllib.request.Request(url, method="POST",
+        data=json.dumps(body or {}).encode(),
+        headers={"Content-Type": "application/json", "X-Nimbus-Admin-Token": token})
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        return json.loads(r.read())
 
+
+def check(url: str, token: str) -> list[str]:
+    """Check readiness without changing controls, declarations, or gate state."""
+    if not token:
+        return ["team token required: both model tiers and configuration must be verified"]
+    problems = []
     try:
         health = _get(f"{url}/health")
-    except Exception as exc:  # noqa: BLE001
-        return [f"/health unreachable: {exc}"]
-    if not health.get("ok"):
-        problems.append(f"/health not ok: {health}")
-    if health.get("status") != "ready":
-        problems.append(f"status is {health.get('status')!r}, not ready")
-    if not health.get("note_chunks"):
-        problems.append("no note chunks -- the retrieval index did not build")
-    print(f"    health      ready · backend={health.get('backend')} · "
-          f"{health.get('note_chunks')} note chunks")
-
-    runtime = {}
-    if token:
-        try:
-            metrics = _get(f"{url}/metrics", token)
-            runtime = metrics.get("runtime", {})
-            config = metrics.get("config", {})
-            print(f"    models      large={runtime.get('model_large')} "
-                  f"small={runtime.get('model_small')} "
-                  f"thinking={runtime.get('thinking_budget')}")
-            leaked = [k for k in config if "INCIDENT" in k.upper()]
-            if leaked:
-                problems.append(f"the incident is readable from /metrics: {leaked}")
-        except urllib.error.HTTPError as exc:
-            problems.append(f"/metrics returned {exc.code} -- wrong team token?")
-
-    for tier_name, force in (("large", None), ("small", "small")):
-        label = runtime.get(f"model_{tier_name}", tier_name)
-        try:
-            if force:
-                # Reach the small tier the way a participant would: switch the
-                # lever, ask, switch back.
-                if not token:
-                    print(f"    {tier_name:<11} skipped (needs the team token)")
-                    continue
-                _post_levers(url, token, {"MODEL_TIER": "small"})
-            text, stats, error = _ask(url, "What is Big-O notation?")
-            if error:
-                problems.append(f"{tier_name} tier ({label}) failed: "
-                                f"{error.get('message', error)}")
-            elif not text.strip():
-                problems.append(f"{tier_name} tier ({label}) returned NO TEXT -- "
-                                f"thinking is probably consuming the whole "
-                                f"output budget")
-            else:
-                print(f"    {tier_name:<11} {stats.get('model')} -> "
-                      f"{text.strip()[:44]!r}")
-        except Exception as exc:  # noqa: BLE001
-            problems.append(f"{tier_name} tier ({label}) raised: {exc}")
-        finally:
-            if force and token:
-                _post_levers(url, token, {"MODEL_TIER": "large"})
-
+        if not health.get("ok") or health.get("status") != "ready" or not health.get("note_chunks"):
+            return ["service is not ready with a built retrieval index"]
+        before = _get(f"{url}/metrics", token)
+        declarations = _get(f"{url}/declarations", token)
+        runtime = before.get("runtime", {})
+        if health.get("backend") != "google" or runtime.get("provider") != "google":
+            problems.append("cloud preflight requires the google backend")
+        if any("INCIDENT" in key.upper() for key in before.get("config", {})):
+            problems.append("private incident configuration is exposed")
+        for endpoint in ("metrics", "declarations"):
+            for bad in (None, "preflight-invalid-token"):
+                try:
+                    _get(f"{url}/{endpoint}", bad)
+                    problems.append(f"/{endpoint} accepted missing or invalid authentication")
+                except urllib.error.HTTPError as exc:
+                    if exc.code != 401:
+                        problems.append(f"/{endpoint} rejected authentication with {exc.code}, expected 401")
+        verified = _post(f"{url}/verify-models", token)
+        if not verified.get("ok"):
+            problems.append("model verification failed")
+        for tier in ("large", "small"):
+            result = verified.get("tiers", {}).get(tier, {})
+            expected = runtime.get(f"model_{tier}")
+            if not result.get("ok") or not result.get("text", "").strip():
+                problems.append(f"{tier} tier returned no usable text")
+            if not expected or result.get("model") != expected:
+                problems.append(f"{tier} tier did not confirm its configured model")
+            if result.get("usage_source") != "provider":
+                problems.append(f"{tier} tier did not report provider usage")
+            print(f"    {tier}: {result.get('model')} ok={result.get('ok')}")
+        answer, stats, error = _ask(url, "What is Big-O notation?")
+        if error or not answer.strip() or not stats:
+            problems.append("normal /ask returned no complete usable answer")
+        after = _get(f"{url}/metrics", token)
+        if after.get("config") != before.get("config"):
+            problems.append("configuration changed during preflight")
+        if _get(f"{url}/declarations", token) != declarations:
+            problems.append("declarations or hypothesis gate changed during preflight")
+    except Exception as exc:
+        problems.append(f"preflight could not complete: {type(exc).__name__}")
     return problems
 
 
-def _post_levers(url, token, values):
-    req = urllib.request.Request(f"{url}/levers", method="POST",
-                                 data=json.dumps(values).encode(),
-                                 headers={"Content-Type": "application/json",
-                                          "X-Nimbus-Admin-Token": token})
-    try:
-        urllib.request.urlopen(req, timeout=TIMEOUT).read()
-    except urllib.error.HTTPError as exc:
-        if exc.code == 409:      # the diagnose-first gate; not a preflight failure
-            return
-        raise
+def _service_token(name, project, region):
+    """Resolve a service's own secret; never print the credential."""
+    raw = subprocess.run(["gcloud", "run", "services", "describe", name,
+        f"--project={project}", f"--region={region}", "--format=json"],
+        capture_output=True, text=True, check=True)
+    env = json.loads(raw.stdout)["spec"]["template"]["spec"]["containers"][0]["env"]
+    ref = next(e["valueFrom"]["secretKeyRef"] for e in env if e["name"] == "NIMBUS_ADMIN_TOKEN")
+    result = subprocess.run(["gcloud", "secrets", "versions", "access", ref["key"],
+        f"--secret={ref['name']}", f"--project={project}"],
+        capture_output=True, text=True, check=True)
+    return result.stdout.strip()
 
 
 def main() -> None:
@@ -147,6 +143,7 @@ def main() -> None:
     ap.add_argument("--url", help="one service URL")
     ap.add_argument("--all-services", action="store_true",
                     help="check every Cloud Run service whose name starts with nimbus")
+    ap.add_argument("--prefix", default="nimbus-team-", help="service prefix for --all-services")
     ap.add_argument("--token", default=os.environ.get("NIMBUS_ADMIN_TOKEN", ""))
     ap.add_argument("--project", default=os.environ.get("GOOGLE_CLOUD_PROJECT", "adsc-nimbus"))
     ap.add_argument("--region", default=os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1"))
@@ -156,9 +153,9 @@ def main() -> None:
         listing = subprocess.run(
             ["gcloud", "run", "services", "list", f"--project={args.project}",
              f"--region={args.region}", "--format=value(metadata.name,status.url)"],
-            capture_output=True, text=True)
+            capture_output=True, text=True, check=True)
         targets = [tuple(line.split("\t")) for line in listing.stdout.splitlines()
-                   if line.startswith("nimbus")]
+                   if line.startswith(args.prefix)]
         if not targets:
             sys.exit("no nimbus services are deployed.")
     elif args.url:
@@ -169,7 +166,11 @@ def main() -> None:
     failed = {}
     for name, url in targets:
         print(f"\n  {name}  {url}")
-        problems = check(url.rstrip("/"), args.token)
+        try:
+            token = args.token or (_service_token(name, args.project, args.region) if args.all_services else "")
+            problems = check(url.rstrip("/"), token)
+        except Exception as exc:
+            problems = [f"cannot access service credential: {type(exc).__name__}"]
         if problems:
             failed[name] = problems
             for p in problems:

@@ -1,0 +1,135 @@
+{
+  "url": "https://nimbus-eval-h7zuiuiwtq-uc.a.run.app",
+  "revision": "nimbus-eval-00001-2lf",
+  "image": "us-central1-docker.pkg.dev/adsc-nimbus/nimbus/nimbus-eval:9caa0d7",
+  "settings": {
+    "NIMBUS_MODEL_BACKEND": "google",
+    "NIMBUS_GOOGLE_API_STYLE": "gemini",
+    "NIMBUS_RESPONSE_CACHE": "false",
+    "NIMBUS_SEMANTIC_CACHE": "false",
+    "NIMBUS_SYSTEM_PROMPT": "TRIMMED",
+    "NIMBUS_RETRIEVE_K": "3",
+    "NIMBUS_MAX_TOKENS": "32",
+    "NIMBUS_MAX_CONCURRENT": "1",
+    "NIMBUS_SHED_ABOVE_QUEUE": "4",
+    "NIMBUS_REQUIRE_HYPOTHESIS": "false",
+    "NIMBUS_GOOGLE_MODEL_SMALL": "gemini-2.5-flash-lite",
+    "NIMBUS_GOOGLE_MODEL_LARGE": "gemini-2.5-flash",
+    "NIMBUS_GEMINI_THINKING_BUDGET": "0"
+  },
+  "secret_reference": [
+    {
+      "key": "latest",
+      "name": "nimbus-admin-token"
+    }
+  ],
+  "admin_access": true,
+  "/health": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "service": "nimbus",
+      "status": "ready",
+      "backend": "google",
+      "note_chunks": 48,
+      "capacity": 1,
+      "served": 0,
+      "shed": 0,
+      "failed": 0,
+      "waiting": 0
+    }
+  },
+  "/brief": {
+    "status": 200,
+    "body": {
+      "title": "Everyone is waiting",
+      "reported": "Every student is waiting, and it is worse at busy times.",
+      "user_impact": "Answers that used to arrive in seconds now take most of a minute.",
+      "targets": {
+        "p95_latency_s": 1.5,
+        "usd_per_month": 1500,
+        "quality_pct": 80
+      },
+      "traffic": {
+        "requests": 16,
+        "rate": 4.0,
+        "concurrency": 8
+      },
+      "task": "Attribute the latency before you change anything. The report names the largest contributor; it will not tell you what to do about it."
+    }
+  },
+  "/metrics": {
+    "status": 401,
+    "body": {}
+  },
+  "/declarations": {
+    "status": 401,
+    "body": {}
+  },
+  "authenticated_metrics": {
+    "status": 200,
+    "body": {
+      "served": 0,
+      "shed": 0,
+      "failed": 0,
+      "waiting": 0,
+      "config": {
+        "MODEL_BACKEND": "google",
+        "RESPONSE_CACHE": false,
+        "PREFIX_CACHE": false,
+        "SEMANTIC_CACHE": false,
+        "SEMANTIC_CACHE_THRESHOLD": 0.92,
+        "MAX_TOKENS": 32,
+        "SYSTEM_PROMPT": "TRIMMED",
+        "RETRIEVE_K": 3,
+        "ROUTE_EASY": false,
+        "MODEL_TIER": "large",
+        "MAX_CONCURRENT": 1,
+        "REPLICAS": 1,
+        "SHED_ABOVE_QUEUE": 4
+      },
+      "runtime": {
+        "provider": "google",
+        "api_style": "gemini",
+        "location": "us-central1",
+        "model_small": "gemini-2.5-flash-lite",
+        "model_large": "gemini-2.5-flash",
+        "thinking_budget": 0
+      },
+      "cache": {
+        "exact_entries": 0,
+        "semantic_entries": 0
+      }
+    }
+  },
+  "declarations_summary": {
+    "status": 200,
+    "required": false,
+    "count": 0
+  },
+  "ask": {
+    "answer": "Big-O notation describes how the running time of an algorithm grows as the size of its input increases, while ignoring constant factors. It helps us understand the efficiency",
+    "stats": {
+      "request_id": "202a6624",
+      "queue_wait_ms": 26.2,
+      "compute_ms": 3319.5,
+      "stages_ms": {
+        "cache": 0.0,
+        "retrieve": 2557.2,
+        "assemble": 0.0,
+        "generate": 761.0
+      },
+      "tokens_in": 261,
+      "tokens_out": 32,
+      "tokens_cached": 0,
+      "usage_source": "provider",
+      "provider": "google",
+      "model": "gemini-2.5-flash",
+      "upstream_retries": 0,
+      "provider_status": null,
+      "cache": "miss",
+      "tier": "large"
+    },
+    "error": null
+  }
+}

@@ -1,0 +1,113 @@
+
+$ nimbus bench --label concurrent final validation
+warming the service (these requests are discarded)...
+sending 16 requests at 1.0/s (up to 2 at once)...
+
+NIMBUS BENCHMARK - run 1  concurrent final validation
+====================================================================
+requests     16 ok · 0 shed · 0 failed      duration  14.1 s
+throughput   1.1 req/s · 35 output tok/s
+
+latency      median     0.58 s
+             p95        0.78 s   SLO 1.50 s   PASS
+             slowest    2.03 s
+TTFT         p95        0.57 s
+             note: with 16 requests, "p95" is the 2nd-slowest
+             request, not a true percentile. Repeat runs vary ~12%.
+             1 of 16 request(s) exceeded the 1.5s target
+
+             ── where the time went ─────────────────────────────
+                      p95 req  p95 each
+  client + network     0.08 s         -  ███
+  app queue wait       0.00 s     0.00s  ▏
+  cache lookup         0.00 s     0.00s  ▏
+  retrieve             0.02 s     0.02s  █
+  assemble             0.00 s     0.00s  ▏
+  generate             0.68 s     0.68s  ████████████████████████
+  other (app)          0.00 s         -  ▏
+                     --------
+  sum of rows          0.78 s   end-to-end 0.78 s · residual +0.0%
+
+             ── how the model behaved ───────────────────────────
+  provider retries        0           upstream status: none
+  provider           google
+
+             ── work per request ────────────────────────────────
+  input tokens          226 avg      baseline 226 · normal
+  output tokens          31 avg      baseline 31 · normal
+  cache hit rate         0%
+  prefix-cached          0%          0 of 3,617 input tokens
+
+cost         $0.144 / 1k requests
+             $650 tokens + $140 Cloud Run estimate
+             $790 / month @ 150,000/day   budget $1,500   PASS
+
+--------------------------------------------------------------------
+VERDICT  2/2 constraints met
+availability 100% successful · PASS
+quality      NOT VERIFIED / FAIL
+RECOVERY     NOT PROVEN
+READ THIS FIRST
+  Largest contributor to the p95 request: GENERATE (87%).
+  Then: client + network 10%, retrieve 3%.
+  Below 1% of the budget: app queue wait, other (app), cache lookup, assemble.
+  At baseline: tokens in, tokens out.
+
+
+
+
+$ nimbus eval
+
+NIMBUS BENCHMARK - run 1  concurrent final validation
+====================================================================
+requests     16 ok · 0 shed · 0 failed      duration  14.1 s
+throughput   1.1 req/s · 35 output tok/s
+
+latency      median     0.58 s
+             p95        0.78 s   SLO 1.50 s   PASS
+             slowest    2.03 s
+TTFT         p95        0.57 s
+             note: with 16 requests, "p95" is the 2nd-slowest
+             request, not a true percentile. Repeat runs vary ~12%.
+             1 of 16 request(s) exceeded the 1.5s target
+
+             ── where the time went ─────────────────────────────
+                      p95 req  p95 each
+  client + network     0.08 s         -  ███
+  app queue wait       0.00 s     0.00s  ▏
+  cache lookup         0.00 s     0.00s  ▏
+  retrieve             0.02 s     0.02s  █
+  assemble             0.00 s     0.00s  ▏
+  generate             0.68 s     0.68s  ████████████████████████
+  other (app)          0.00 s         -  ▏
+                     --------
+  sum of rows          0.78 s   end-to-end 0.78 s · residual +0.0%
+
+             ── how the model behaved ───────────────────────────
+  provider retries        0           upstream status: none
+  provider           google
+
+             ── work per request ────────────────────────────────
+  input tokens          226 avg      baseline 226 · normal
+  output tokens          31 avg      baseline 31 · normal
+  cache hit rate         0%
+  prefix-cached          0%          0 of 3,617 input tokens
+
+cost         $0.144 / 1k requests
+             $650 tokens + $140 Cloud Run estimate
+             $790 / month @ 150,000/day   budget $1,500   PASS
+
+--------------------------------------------------------------------
+VERDICT  2/2 constraints met
+availability 100% successful · PASS
+quality      PASS
+RECOVERY     PASS
+READ THIS FIRST
+  Largest contributor to the p95 request: GENERATE (87%).
+  Then: client + network 10%, retrieve 3%.
+  Below 1% of the budget: app queue wait, other (app), cache lookup, assemble.
+  At baseline: tokens in, tokens out.
+
+Quality: 94.4% (34/36)
+
+

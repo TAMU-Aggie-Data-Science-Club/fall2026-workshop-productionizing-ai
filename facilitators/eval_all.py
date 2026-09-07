@@ -82,7 +82,7 @@ try:
         rows.append(data)
         # Persist after EVERY config: one failure at config 3 should not throw
         # away configs 1 and 2.
-        (ROOT / "facilitators" / "eval_results.json").write_text(json.dumps(rows, indent=2))
+        (ROOT / "facilitators" / "generated" / "eval_results.json").write_text(json.dumps(rows, indent=2))
         print(f"{data['score_pct']:5.1f}%  {label}  "
               f"(extraction {data['extraction_pct']:.0f}%, reasoning {data['reasoning_pct']:.0f}%)",
               flush=True)

@@ -44,9 +44,9 @@ import report                                  # noqa: E402
 import run as bench                            # noqa: E402
 
 SCENARIO = json.loads((ROOT / "scenario.json").read_text())
-OUT = ROOT / "facilitators" / "signatures.json"
-PANELS = ROOT / "facilitators" / "incident_panels"
-PAYLOAD_DIR = ROOT / "facilitators" / "incident_payloads"
+OUT = ROOT / "facilitators" / "generated" / "signatures.json"
+PANELS = ROOT / "facilitators" / "generated" / "incident_panels"
+PAYLOAD_DIR = ROOT / "facilitators" / "generated" / "incident_payloads"
 SCENARIO_PATH = ROOT / "scenario.json"
 PAYLOADS: dict[str, dict] = {}
 

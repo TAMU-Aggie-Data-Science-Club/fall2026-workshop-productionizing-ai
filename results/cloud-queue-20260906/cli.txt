@@ -1,0 +1,337 @@
+
+$ nimbus brief
+
+  INCIDENT — EVERYONE IS WAITING
+
+  WHAT WAS REPORTED
+    Every student is waiting, and it is worse at busy times.
+
+  WHO IT AFFECTS
+    Answers that used to arrive in seconds now take most of a minute.
+
+  TARGETS
+    p95 latency    at most 1.5 s
+    monthly cost   at most $1,500
+    answer quality at least 80%
+
+  YOUR TASK
+    Attribute the latency before you change anything. The report names the largest contributor; it will not tell you what to do about it.
+
+  Start with:  nimbus baseline
+
+
+
+
+$ nimbus baseline
+
+  BASELINE — change nothing yet.
+  Read where the time went before you touch a setting.
+
+warming the service (these requests are discarded)...
+sending 16 requests at 4.0/s (up to 8 at once)...
+
+NIMBUS BENCHMARK - run 1  baseline
+====================================================================
+requests     11 ok · 5 shed · 0 failed      duration  8.5 s
+throughput   1.3 req/s · 39 output tok/s
+
+latency      median     5.23 s
+             p95        5.76 s   SLO 1.50 s   FAIL
+             slowest    5.76 s
+TTFT         p95        5.33 s
+             note: with 11 requests, "p95" is the 1st-slowest
+             request, not a true percentile. Repeat runs vary ~12%.
+             9 of 11 request(s) exceeded the 1.5s target
+
+             ── where the time went ─────────────────────────────
+                      p95 req  p95 each
+  client + network     0.25 s         -  █
+  app queue wait       4.86 s     4.86s  ████████████████████████
+  cache lookup         0.00 s     0.00s  ▏
+  retrieve             0.05 s     0.10s  ▏
+  assemble             0.00 s     0.00s  ▏
+  generate             0.59 s     2.31s  ███
+  other (app)          0.00 s         -  ▏
+                     --------
+  sum of rows          5.76 s   end-to-end 5.76 s · residual +0.0%
+
+             ── how the model behaved ───────────────────────────
+  provider retries        0           upstream status: none
+  provider           google
+
+             ── work per request ────────────────────────────────
+  input tokens          222 avg      baseline 226 · normal
+  output tokens          30 avg      baseline 31 · normal
+  cache hit rate         0%
+  prefix-cached          0%          0 of 2,445 input tokens
+
+cost         $0.142 / 1k requests
+             $638 tokens + $140 Cloud Run estimate
+             $778 / month @ 150,000/day   budget $1,500   PASS
+
+--------------------------------------------------------------------
+VERDICT  1/2 constraints met
+availability 69% successful · FAIL
+quality      NOT VERIFIED / FAIL
+RECOVERY     NOT PROVEN
+READ THIS FIRST
+  Largest contributor to the p95 request: APP QUEUE WAIT (84%).
+  Then: generate 10%, client + network 4%.
+  Below 1% of the budget: retrieve, other (app), cache lookup, assemble.
+  At baseline: tokens in, tokens out.
+
+
+
+
+$ nimbus diagnose
+
+NIMBUS BENCHMARK - run 1  baseline
+====================================================================
+requests     11 ok · 5 shed · 0 failed      duration  8.5 s
+throughput   1.3 req/s · 39 output tok/s
+
+latency      median     5.23 s
+             p95        5.76 s   SLO 1.50 s   FAIL
+             slowest    5.76 s
+TTFT         p95        5.33 s
+             note: with 11 requests, "p95" is the 1st-slowest
+             request, not a true percentile. Repeat runs vary ~12%.
+             9 of 11 request(s) exceeded the 1.5s target
+
+             ── where the time went ─────────────────────────────
+                      p95 req  p95 each
+  client + network     0.25 s         -  █
+  app queue wait       4.86 s     4.86s  ████████████████████████
+  cache lookup         0.00 s     0.00s  ▏
+  retrieve             0.05 s     0.10s  ▏
+  assemble             0.00 s     0.00s  ▏
+  generate             0.59 s     2.31s  ███
+  other (app)          0.00 s         -  ▏
+                     --------
+  sum of rows          5.76 s   end-to-end 5.76 s · residual +0.0%
+
+             ── how the model behaved ───────────────────────────
+  provider retries        0           upstream status: none
+  provider           google
+
+             ── work per request ────────────────────────────────
+  input tokens          222 avg      baseline 226 · normal
+  output tokens          30 avg      baseline 31 · normal
+  cache hit rate         0%
+  prefix-cached          0%          0 of 2,445 input tokens
+
+cost         $0.142 / 1k requests
+             $638 tokens + $140 Cloud Run estimate
+             $778 / month @ 150,000/day   budget $1,500   PASS
+
+--------------------------------------------------------------------
+VERDICT  1/2 constraints met
+availability 69% successful · FAIL
+quality      NOT VERIFIED / FAIL
+RECOVERY     NOT PROVEN
+READ THIS FIRST
+  Largest contributor to the p95 request: APP QUEUE WAIT (84%).
+  Then: generate 10%, client + network 4%.
+  Below 1% of the budget: retrieve, other (app), cache lookup, assemble.
+  At baseline: tokens in, tokens out.
+
+  QUESTIONS TO ANSWER BEFORE YOU CHANGE ANYTHING
+    1. queue is 84% of the p95 request. Why would that be?
+    2. Is the model implicated? Which number settles it?
+    3. What is the ONE change you would make, and what should move?
+
+  Then:  nimbus hypothesis
+
+
+
+
+$ nimbus hypothesis --slice app queue wait --proof queue contributes 4859ms to the p95 request
+Recorded. You can change a setting now:  nimbus set KEY=VALUE
+
+
+
+$ nimbus set RESPONSE_CACHE=true
+Applied:
+  RESPONSE_CACHE: False -> True
+
+Measure again:  nimbus bench --label 'what you changed'
+
+
+
+$ nimbus bench --label reuse repeated answers
+warming the service (these requests are discarded)...
+sending 16 requests at 4.0/s (up to 8 at once)...
+
+NIMBUS BENCHMARK - run 2  reuse repeated answers
+====================================================================
+requests     15 ok · 1 shed · 0 failed      duration  3.7 s
+throughput   4.0 req/s · 46 output tok/s
+
+latency      median     1.16 s
+             p95        1.56 s   SLO 1.50 s   MARGINAL
+             slowest    1.70 s
+TTFT         p95        1.46 s
+             note: with 15 requests, "p95" is the 2nd-slowest
+             request, not a true percentile. Repeat runs vary ~12%.
+             3 of 15 request(s) exceeded the 1.5s target
+
+             ── where the time went ─────────────────────────────
+                      p95 req  p95 each
+  client + network     0.08 s         -  ██
+  app queue wait       0.97 s     1.29s  ████████████████████████
+  cache lookup         0.00 s     0.00s  ▏
+  retrieve             0.02 s     0.03s  █
+  assemble             0.00 s     0.00s  ▏
+  generate             0.49 s     0.54s  ████████████
+  other (app)          0.00 s         -  ▏
+                     --------
+  sum of rows          1.56 s   end-to-end 1.56 s · residual +0.0%
+
+             ── how the model behaved ───────────────────────────
+  provider retries        0           upstream status: none
+  provider           google
+
+             ── work per request ────────────────────────────────
+  input tokens          227 avg      baseline 226 · normal
+  output tokens          28 avg      baseline 31 · normal
+  cache hit rate        60%
+  prefix-cached          0%          0 of 1,363 input tokens
+
+cost         $0.056 / 1k requests
+             $250 tokens + $140 Cloud Run estimate
+             $390 / month @ 150,000/day   budget $1,500   PASS
+
+--------------------------------------------------------------------
+VERDICT  1/2 constraints met  -- but within measurement noise. Run it again before believing it.      (run 1: p95 5.76s, $778/mo)
+availability 94% successful · FAIL
+quality      NOT VERIFIED / FAIL
+RECOVERY     NOT PROVEN
+READ THIS FIRST
+  Largest contributor to the p95 request: APP QUEUE WAIT (62%).
+  Then: generate 32%, client + network 5%.
+  Below 1% of the budget: other (app), cache lookup, assemble.
+  At baseline: tokens in, tokens out.
+
+
+
+
+$ nimbus set MAX_CONCURRENT=2
+Applied:
+  MAX_CONCURRENT: 1 -> 2
+
+Measure again:  nimbus bench --label 'what you changed'
+
+
+
+$ nimbus bench --label increase application admission after removing repeated work
+warming the service (these requests are discarded)...
+sending 16 requests at 4.0/s (up to 8 at once)...
+
+NIMBUS BENCHMARK - run 3  increase application admission after removing repeated work
+====================================================================
+requests     16 ok · 0 shed · 0 failed      duration  3.7 s
+throughput   4.3 req/s · 54 output tok/s
+
+latency      median     0.62 s
+             p95        1.06 s   SLO 1.50 s   PASS
+             slowest    1.53 s
+TTFT         p95        0.92 s
+             note: with 16 requests, "p95" is the 2nd-slowest
+             request, not a true percentile. Repeat runs vary ~12%.
+             1 of 16 request(s) exceeded the 1.5s target
+
+             ── where the time went ─────────────────────────────
+                      p95 req  p95 each
+  client + network     0.09 s         -  ███
+  app queue wait       0.24 s     0.38s  █████████
+  cache lookup         0.00 s     0.00s  ▏
+  retrieve             0.09 s     0.14s  ███
+  assemble             0.00 s     0.00s  ▏
+  generate             0.64 s     0.66s  ████████████████████████
+  other (app)          0.01 s         -  ▏
+                     --------
+  sum of rows          1.06 s   end-to-end 1.06 s · residual +0.0%
+
+             ── how the model behaved ───────────────────────────
+  provider retries        0           upstream status: none
+  provider           google
+
+             ── work per request ────────────────────────────────
+  input tokens          228 avg      baseline 226 · normal
+  output tokens          29 avg      baseline 31 · normal
+  cache hit rate        56%
+  prefix-cached          0%          0 of 1,597 input tokens
+
+cost         $0.062 / 1k requests
+             $277 tokens + $140 Cloud Run estimate
+             $417 / month @ 150,000/day   budget $1,500   PASS
+
+--------------------------------------------------------------------
+VERDICT  2/2 constraints met      (run 2: p95 1.56s, $390/mo)
+availability 100% successful · PASS
+quality      NOT VERIFIED / FAIL
+RECOVERY     NOT PROVEN
+READ THIS FIRST
+  Largest contributor to the p95 request: GENERATE (61%).
+  Then: app queue wait 22%, client + network 8%.
+  Below 1% of the budget: cache lookup, assemble.
+  At baseline: tokens in, tokens out.
+
+
+
+
+$ nimbus eval
+
+NIMBUS BENCHMARK - run 3  increase application admission after removing repeated work
+====================================================================
+requests     16 ok · 0 shed · 0 failed      duration  3.7 s
+throughput   4.3 req/s · 54 output tok/s
+
+latency      median     0.62 s
+             p95        1.06 s   SLO 1.50 s   PASS
+             slowest    1.53 s
+TTFT         p95        0.92 s
+             note: with 16 requests, "p95" is the 2nd-slowest
+             request, not a true percentile. Repeat runs vary ~12%.
+             1 of 16 request(s) exceeded the 1.5s target
+
+             ── where the time went ─────────────────────────────
+                      p95 req  p95 each
+  client + network     0.09 s         -  ███
+  app queue wait       0.24 s     0.38s  █████████
+  cache lookup         0.00 s     0.00s  ▏
+  retrieve             0.09 s     0.14s  ███
+  assemble             0.00 s     0.00s  ▏
+  generate             0.64 s     0.66s  ████████████████████████
+  other (app)          0.01 s         -  ▏
+                     --------
+  sum of rows          1.06 s   end-to-end 1.06 s · residual +0.0%
+
+             ── how the model behaved ───────────────────────────
+  provider retries        0           upstream status: none
+  provider           google
+
+             ── work per request ────────────────────────────────
+  input tokens          228 avg      baseline 226 · normal
+  output tokens          29 avg      baseline 31 · normal
+  cache hit rate        56%
+  prefix-cached          0%          0 of 1,597 input tokens
+
+cost         $0.062 / 1k requests
+             $277 tokens + $140 Cloud Run estimate
+             $417 / month @ 150,000/day   budget $1,500   PASS
+
+--------------------------------------------------------------------
+VERDICT  2/2 constraints met      (run 2: p95 1.56s, $390/mo)
+availability 100% successful · PASS
+quality      PASS
+RECOVERY     PASS
+READ THIS FIRST
+  Largest contributor to the p95 request: GENERATE (61%).
+  Then: app queue wait 22%, client + network 8%.
+  Below 1% of the budget: cache lookup, assemble.
+  At baseline: tokens in, tokens out.
+
+Quality: 94.4% (34/36)
+
+
