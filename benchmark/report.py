@@ -484,3 +484,207 @@ def _read_this_first(s: dict, scenario: dict) -> list[str]:
         out.append(f"  The provider was retried {s['upstream_retries']} time(s); "
                    f"that time is inside generate.")
     return out
+
+
+# ═════════════════════════════════════════════════════════════════════════
+#  STEP RENDERING
+#
+#  The five step commands (benchmark / infra / monitor / optimize / guard)
+#  draw the same measurements the report above already computes. Nothing here
+#  measures anything new -- it reshapes what `summarise` returned so that a
+#  first-year can read it without doing arithmetic in their head.
+#
+#  The rule from the top of this file still holds: these may ATTRIBUTE and
+#  they may show a distance from a target, but they must never name the lever
+#  that closes it.
+# ═════════════════════════════════════════════════════════════════════════
+
+# Ledger keys in the words a student would use. The technical name is taught
+# alongside the friendly one in the report above; this is the reading aid, not
+# a replacement vocabulary.
+FRIENDLY = {
+    "client_network": "network",
+    "queue":          "wait for a slot",
+    "cache":          "check the cache",
+    "retrieve":       "find the notes",
+    "assemble":       "build the prompt",
+    "generate":       "write the answer",
+    "other":          "other app work",
+}
+
+
+def _place(width: int, items: list[tuple[int, str]]) -> str:
+    """Lay labels out on one line at given positions; drop any that collide.
+
+    Dropping beats overlapping: two labels printed on top of each other read as
+    corruption, and a missing label is recoverable from the row above it.
+    """
+    line = [" "] * width
+    for pos, text in sorted(items):
+        start = max(0, min(pos, width - len(text)))
+        window = range(max(0, start - 1), min(width, start + len(text) + 1))
+        if all(line[i] == " " for i in window):
+            for offset, char in enumerate(text):
+                if start + offset < width:
+                    line[start + offset] = char
+    return "".join(line).rstrip()
+
+
+def gap_bar(name: str, value, target, unit: str = "s", width: int = 44,
+            money: bool = False) -> list[str]:
+    """One metric drawn as a distance from its target.
+
+    A verdict line says PASS or FAIL. It does not say how far, or which way you
+    just moved -- which is the only question a team in the middle of optimising
+    actually has. The bar answers it without arithmetic.
+    """
+    def fmt(x: float) -> str:
+        return f"${x:,.0f}" if money else f"{x:.2f} {unit}"
+
+    if value is None or target is None or target <= 0:
+        return [f"  {name:<15}not measured"]
+
+    scale = max(value, target) * 1.25
+    span = width - 1
+    tp = max(0, min(span, int(round(target / scale * span))))
+    vp = max(0, min(span, int(round(value / scale * span))))
+
+    track = ["─"] * width
+    track[tp] = "┼"
+    track[vp] = "▲"          # value last: if they collide, "you are here" wins
+
+    over = value - target
+    if over > 0:
+        delta = f"▲ {fmt(over)} OVER"
+        state = "FAIL"
+    else:
+        delta = f"▼ {fmt(abs(over))} under"
+        state = "PASS"
+
+    return [
+        f"  {name:<15}{fmt(value):>10}   target {fmt(target):<10} {delta}  {state}",
+        "  ├" + "".join(track) + "┤",
+        "   " + _place(width, [(tp, "target"), (vp, fmt(value))]),
+    ]
+
+
+def stage_histogram(ledger: dict, width: int = 20) -> list[str]:
+    """Where one representative slow request spent its time, drawn.
+
+    The ledger already sums to the request, so a share is meaningful. Drawing it
+    is what turns "retrieve 1.21" into "retrieve is most of it" without asking a
+    first-year to divide two numbers under time pressure.
+    """
+    total = sum(ledger.values())
+    if total <= 0:
+        return ["    no timing recorded for this run"]
+    peak = max(ledger.values()) or 1.0
+    out = []
+    for key, value in sorted(ledger.items(), key=lambda kv: kv[1], reverse=True):
+        share = value / total * 100
+        if share < 0.5:
+            continue
+        bar = "█" * max(1, int(round(value / peak * width)))
+        out.append(f"    {FRIENDLY.get(key, key):<18}{value / 1000:6.2f} s  "
+                   f"{bar:<{width}} {share:3.0f}%")
+    quiet = [FRIENDLY.get(k, k) for k, v in ledger.items() if v / total * 100 < 0.5]
+    if quiet:
+        out.append(f"    {'':<18}{'':>6}    below 1%: {', '.join(quiet)}")
+    return out
+
+
+def _tier_price(tier: str, payload: dict, scenario: dict):
+    """The real per-token price of one tier on the backend that actually ran.
+
+    Mirrors _price_for, but keyed on a tier rather than on a request, because
+    the projection asks what a tier WOULD cost -- there are no requests from it
+    to read a model name off.
+    """
+    runtime = payload.get("server_runtime", {}) or {}
+    provider = runtime.get("provider", "local")
+    if provider == "ollama":
+        return {"input": 0.0, "output": 0.0, "cached_input": 0.0}
+    if provider == "local":
+        return scenario.get("prices", {}).get(tier)
+    model = runtime.get(f"model_{tier}")
+    if not model:
+        return None
+    return scenario.get("provider_prices", {}).get(f"{provider}:{model}")
+
+
+def tier_projection(payload: dict, scenario: dict) -> list[str]:
+    """What each model tier would cost on THIS run's measured token counts.
+
+    Arithmetic on a run that already happened, so it sends no traffic and costs
+    nothing. Cost is projected; QUALITY IS DELIBERATELY ABSENT. Cost and latency
+    are computable from a run, answer quality is not -- and that asymmetry is
+    the entire lesson of the step. A team that reads a cheap row here and ships
+    it without evaluating has made exactly the mistake the exercise is about.
+    """
+    s = summarise(payload, scenario)
+    if not s["usage_complete"] or s["generated_requests"] == 0:
+        return ["    provider usage was not reported for every request, so this",
+                "    projection would be wrong. Re-run the benchmark."]
+
+    runtime = payload.get("server_runtime", {}) or {}
+    current = payload.get("server_config", {}).get("MODEL_TIER", "large")
+    monthly_requests = scenario["traffic"]["requests_per_day"] * 30
+    infra = s["usd_infra_per_month"] or 0.0
+    tokens_in, tokens_out = s["tokens_in_mean"], s["tokens_out_mean"]
+
+    out = [f"    {'tier':<8}{'model':<26}{'$/month':>10}   {'vs now':>10}"]
+    rows, baseline_total = [], None
+    for tier in ("large", "small"):
+        price = _tier_price(tier, payload, scenario)
+        model = runtime.get(f"model_{tier}", tier)
+        if price is None:
+            rows.append((tier, model, None))
+            continue
+        per_request = (tokens_in / 1e6) * price["input"] + (tokens_out / 1e6) * price["output"]
+        total = per_request * monthly_requests + infra
+        if tier == current:
+            baseline_total = total
+        rows.append((tier, model, total))
+
+    for tier, model, total in rows:
+        marker = "  <- now" if tier == current else ""
+        if total is None:
+            out.append(f"    {tier:<8}{model:<26}{'no price':>10}{marker}")
+            continue
+        if baseline_total is None or tier == current:
+            delta = "—"
+        else:
+            delta = f"{total - baseline_total:+,.0f}"
+        out.append(f"    {tier:<8}{model:<26}{total:>9,.0f}   {delta:>10}{marker}")
+
+    out.append("")
+    out.append("    Cost is arithmetic. ANSWER QUALITY IS NOT IN THIS TABLE,")
+    out.append("    because a run cannot tell you it. Only `nimbus guard` can.")
+    return out
+
+
+def cost_split(payload: dict, scenario: dict, width: int = 24) -> list[str]:
+    """The monthly bill separated into tokens and hosting.
+
+    Participants never deploy anything, so "what does it cost to keep a server
+    on" is invisible to them by default. It is 18% of this bill and it is owed
+    whether or not a single student asks a question.
+    """
+    s = summarise(payload, scenario)
+    tokens, infra, total = (s["usd_tokens_per_month"], s["usd_infra_per_month"],
+                            s["usd_per_month"])
+    if total is None or not total:
+        return ["    cost unknown for this run"]
+    out = []
+    for label, value in (("tokens to the model provider", tokens),
+                         ("keeping the server on", infra)):
+        if value is None:
+            out.append(f"    {label:<32}{'unknown':>9}")
+            continue
+        share = value / total * 100
+        bar = "█" * max(1, int(round(value / total * width)))
+        out.append(f"    {label:<32}{value:>8,.0f}   {share:3.0f}%")
+        out.append(f"    {'':<32}{bar}")
+    out.append(f"    {'':<32}{'-'*8}")
+    out.append(f"    {'total per month':<32}{total:>8,.0f}")
+    return out

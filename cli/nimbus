@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """Nimbus — the incident you are on call for.
 
+FIVE STEPS, in order. One per stage of putting an AI service into production:
+
     nimbus init <url> <token>   point this terminal at your team's service
-    nimbus brief                what was reported, and the targets to hit
-    nimbus baseline             measure, change nothing
-    nimbus diagnose             read the last run back
-    nimbus hypothesis           record what you think is wrong
-    nimbus set K=V              change one setting on the running service
-    nimbus bench                measure again
-    nimbus status               what the service is configured with
+    nimbus benchmark            1. measure it, and price the model choice
+    nimbus infra                2. where it runs, and what that costs
+    nimbus monitor              3. where the time actually goes
+    nimbus optimize             4. predict, change ONE thing, measure again
+    nimbus guard                5. check the answers survived
+
+That is the whole activity. Everything below is the same machinery with the
+guide rails off, for anyone who would rather drive it directly:
+
+    brief · baseline · bench · diagnose · requests · hypothesis · set · eval
+    status
 
 The loop is: measure, attribute, commit to a diagnosis, change ONE thing,
 measure again. The report names the largest contributor to your latency. It
@@ -21,6 +27,7 @@ import os
 import pathlib
 import sys
 import subprocess
+import textwrap
 import uuid
 from datetime import datetime, timezone
 
@@ -128,7 +135,7 @@ def _ensure_warm(url, bench, rounds=5, batch=4):
         previous = elapsed
 
 
-def _run_benchmark(label, requests, rate, concurrency):
+def _run_benchmark(label, requests, rate, concurrency, show_report=True):
     import run as bench
     from report import render
     cfg = _load()
@@ -162,7 +169,10 @@ def _run_benchmark(label, requests, rate, concurrency):
                "results": results}
     with (directory / f"run-{run_no}.json").open("x") as f:
         json.dump(payload, f, indent=2)
-    print(render(payload, SCENARIO, directory))
+    # The step commands draw their own compact view of this same payload;
+    # the fast-lane commands print the full report. Both read one measurement.
+    if show_report:
+        print(render(payload, SCENARIO, directory))
     return payload
 
 
@@ -223,6 +233,98 @@ def cmd_diagnose(args):
     print("    3. What is the ONE change you would make, and what should move?")
     print()
     print("  Then:  nimbus hypothesis")
+    print()
+
+
+def cmd_requests(args):
+    """The individual requests behind the last run's p95.
+
+    The report gives you a percentile; this gives you the requests it was
+    computed from. That matters at this sample size: with 16 requests "p95" is
+    the second-slowest request, not a distribution -- so the question worth
+    asking is not "what is the p95" but "what were the slow ones waiting on".
+
+    Reads the saved run only. It sends no traffic and does not touch the
+    service, so it can be run as often as you like, including after the fact.
+    """
+    directory = _run_dir()
+    runs = sorted(directory.glob("run-*.json"),
+                  key=lambda p: int(p.stem.split("-")[1])) if directory.exists() else []
+    if not runs:
+        sys.exit("No runs yet. Start with `nimbus baseline`.")
+    payload = json.loads(runs[-1].read_text())
+
+    # The same decomposition the report's ledger uses, so the rows here and the
+    # "where the time went" panel can never disagree.
+    from report import LEDGER_LABELS, _ledger_for
+
+    rows = payload["results"]
+    slo = SCENARIO.get("constraints", {}).get("slo_p95_latency_s")
+    ok = [(i + 1, r) for i, r in enumerate(rows) if r.get("ok")]
+    shed = sum(1 for r in rows if r.get("shed"))
+    failed = sum(1 for r in rows if not r.get("ok") and not r.get("shed"))
+
+    if not ok:
+        sys.exit("Every request in that run failed. Check `nimbus status` and "
+                 "ask a facilitator to confirm the service is ready.")
+
+    ordered = sorted(ok, key=lambda pair: pair[1].get("latency_s", 0.0), reverse=True)
+    over = [pair for pair in ordered if slo and pair[1].get("latency_s", 0.0) > slo]
+
+    print()
+    print(f"REQUESTS — run {payload['run']}, slowest first")
+    if payload.get("label"):
+        print(f"  {payload['label']}")
+    target = f"target {slo:.2f} s" if slo else "no target configured"
+    print(f"  {len(ok)} ok · {shed} shed · {failed} failed · {target}")
+    print()
+
+    if args.slow and not slo:
+        print("  No latency target is configured, so --slow has nothing to "
+              "filter on. Showing every request instead.")
+        print()
+    elif args.slow and not over:
+        print(f"  No successful request exceeded {slo:.2f} s in this run.")
+        print()
+        return
+
+    shown = over if args.slow else ordered
+    print(f"  {'#':>3}  {'total':>7}  {'queue':>7}  {'retrieve':>8}  "
+          f"{'generate':>8}  {'in':>4}  {'out':>4}  {'cache':>5}  tier")
+    for number, r in shown:
+        stages = r.get("stages_ms") or {}
+        flag = "  MISS" if slo and r.get("latency_s", 0.0) > slo else ""
+        print(f"  {number:>3}  {r.get('latency_s', 0.0):>6.2f}s  "
+              f"{(r.get('queue_wait_ms') or 0.0) / 1000:>6.2f}s  "
+              f"{(stages.get('retrieve') or 0.0) / 1000:>7.2f}s  "
+              f"{(stages.get('generate') or 0.0) / 1000:>7.2f}s  "
+              f"{r.get('tokens_in', 0):>4}  {r.get('tokens_out', 0):>4}  "
+              f"{r.get('cache', 'miss'):>5}  {r.get('tier', '-')}{flag}")
+    print()
+
+    # What the slow requests were actually waiting on. Counting the largest
+    # component per request answers a question a percentile cannot: whether the
+    # slow requests are all slow for the SAME reason, or for different ones.
+    subject = over or ordered
+    dominant: dict[str, int] = {}
+    for _, r in subject:
+        ledger = _ledger_for(r)
+        if not any(ledger.values()):
+            continue
+        top = max(ledger, key=lambda key: ledger[key])
+        dominant[top] = dominant.get(top, 0) + 1
+
+    if slo:
+        print(f"  {len(over)} of {len(ok)} successful request(s) missed the "
+              f"{slo:.2f} s target.")
+    if dominant:
+        top, count = max(dominant.items(), key=lambda kv: kv[1])
+        noun = "slowest" if not over else "missing"
+        print(f"  Largest component was {LEDGER_LABELS.get(top, top).upper()} "
+              f"in {count} of {len(subject)} {noun} request(s).")
+    if shed:
+        print(f"  {shed} request(s) were rejected before being served and have "
+              f"no timing to show.")
     print()
 
 
@@ -307,6 +409,586 @@ def cmd_status(args):
     print()
 
 
+# ═════════════════════════════════════════════════════════════════════════
+#  THE FIVE STEPS
+#
+#  benchmark → infra → monitor → optimize → guard
+#
+#  One command per step of the production process the workshop teaches, in the
+#  order it teaches them. They are wrappers: every measurement underneath is
+#  the same code the individual commands above already run, so the fast lane
+#  (baseline / diagnose / set / bench / eval) and the guided lane can never
+#  disagree about a number.
+#
+#  Two of the five send no traffic at all. That is what makes five steps fit in
+#  the time four used to take.
+# ═════════════════════════════════════════════════════════════════════════
+
+# Repeated runs of an identical configuration vary by about 12% on this
+# workload. Anything inside that band is noise that happened to land on one
+# side of the line, and a prediction cannot be graded against it.
+NOISE = 0.15
+
+# The choices offered at step 4.
+#
+# FIVE, not the eleven in config.LEVERS. Eleven settings each carrying a
+# tradeoff sentence is a literature review; five numbered options is a decision
+# a first-year can make in ninety seconds. The wrong ones are not padding --
+# a team that reaches for the cheaper model and watches nothing happen has
+# learned more about model selection than one that guesses right immediately.
+#
+# Values are directional from HEALTHY_ENV (RETRIEVE_K 3, MAX_TOKENS 32,
+# MAX_CONCURRENT 2), so every option is a real change on a deployed service.
+#
+# Worth knowing when editing: RESPONSE_CACHE is checked AFTER retrieval and
+# SEMANTIC_CACHE before it, so swapping option 1 for RESPONSE_CACHE turns this
+# menu into a lesson about where in the pipeline a cache sits.
+OPTIONS = [
+    {"say": "Reuse answers to similar questions",
+     "how": "Checks whether a similar question was already answered, before "
+            "looking anything up.",
+     "lever": "SEMANTIC_CACHE", "value": "true"},
+    {"say": "Use the cheaper, faster model",
+     "how": "Sends every question to the small model instead of the large one.",
+     "lever": "MODEL_TIER", "value": "small"},
+    {"say": "Look up fewer notes per question",
+     "how": "Puts less material into each prompt.",
+     "lever": "RETRIEVE_K", "value": "1"},
+    {"say": "Write shorter answers",
+     "how": "Caps how much the model is allowed to generate.",
+     "lever": "MAX_TOKENS", "value": "16"},
+    {"say": "Handle more questions at once",
+     "how": "Raises how many requests may compute simultaneously.",
+     "lever": "MAX_CONCURRENT", "value": "8"},
+]
+
+STEPS = (("1", "benchmark", "measure it, and price the model"),
+         ("2", "infra", "see where it runs and what that costs"),
+         ("3", "monitor", "find where the time goes"),
+         ("4", "optimize", "change one thing and re-measure"),
+         ("5", "guard", "check the answers survived"))
+
+
+def _rule(title=""):
+    return f"  ── {title} " + "─" * max(0, 56 - len(title)) if title else "  " + "─" * 60
+
+
+def _steps_footer(current: int):
+    """Where you are in the five steps. Printed at the end of every step.
+
+    Seeing all five is the point even when the room only walks three: the
+    workshop is teaching that productionizing has five parts, and a command
+    that shows one part at a time hides that.
+    """
+    out = ["", _rule("the five steps")]
+    for number, name, blurb in STEPS:
+        n = int(number)
+        mark = "✓" if n < current else ("▸" if n == current else " ")
+        emphasis = f"{name:<11}" if n == current else f"{name:<11}"
+        out.append(f"   {mark} {number}  {emphasis} {blurb}")
+    if current < 5:
+        nxt = STEPS[current][1]
+        out.append("")
+        out.append(f"  Next:  nimbus {nxt}")
+    out.append("")
+    return out
+
+
+def _runs():
+    directory = _run_dir()
+    if not directory.exists():
+        return []
+    return sorted(directory.glob("run-*.json"),
+                  key=lambda p: int(p.stem.split("-")[1]))
+
+
+def _last_payload(step_hint="nimbus benchmark"):
+    runs = _runs()
+    if not runs:
+        sys.exit(f"No measurement yet. Start with `{step_hint}`.")
+    return json.loads(runs[-1].read_text())
+
+
+def _targets():
+    constraints = SCENARIO.get("constraints", {})
+    return (constraints.get("slo_p95_latency_s"),
+            constraints.get("budget_usd_per_month"),
+            constraints.get("quality_bar_eval_pct"))
+
+
+def _gap_panel(payload):
+    """The two constraint bars. The one thing every step-4 loop is judged on."""
+    from report import gap_bar, summarise
+    s = summarise(payload, SCENARIO)
+    slo, budget, _ = _targets()
+    out = []
+    out += gap_bar("p95 latency", s["p95"] if s["ok"] else None, slo)
+    out.append("")
+    out += gap_bar("cost", s["usd_per_month"], budget, money=True)
+    return out
+
+
+# ── STEP 1 ───────────────────────────────────────────────────────────────
+def cmd_benchmark(args):
+    """Measure the service, then price the model choice against that measurement.
+
+    Model selection is the first thing the workshop teaches and the last thing
+    a team can check by eye, so the tier table is put here -- computed from the
+    run that just happened, sending no additional traffic.
+    """
+    from report import tier_projection
+    d = _traffic()
+    existing = _runs()
+    print("\n  STEP 1 of 5 — BENCHMARK")
+    print("  Measure before you touch anything. This is the number you will")
+    print("  be judged against for the rest of the activity.\n")
+    payload = _run_benchmark(
+        "baseline" if not existing else (args.label or "re-measured"),
+        args.requests or d["requests"], args.rate or d["rate"],
+        args.concurrency or d["concurrency"], show_report=False)
+
+    print()
+    print(_rule("are you meeting your targets?"))
+    print()
+    print("\n".join(_gap_panel(payload)))
+    print()
+    print(_rule("what would each model cost?"))
+    print()
+    print("\n".join(tier_projection(payload, SCENARIO)))
+    print("\n".join(_steps_footer(1)))
+
+
+# ── STEP 2 ───────────────────────────────────────────────────────────────
+def cmd_infra(args):
+    """Where the service runs, and what the hosting itself costs.
+
+    Participants never deploy anything, so hosting is invisible to them by
+    default -- the service simply exists. It is roughly a fifth of the bill and
+    it is owed whether or not a single student asks a question, which is not a
+    fact anyone infers from a latency report.
+
+    Sends no benchmark traffic.
+    """
+    from report import cost_split
+    status, metrics = _http("/metrics")
+    if status == 401:
+        sys.exit("That token was not accepted. Check it with your facilitator.")
+    if status != 200:
+        sys.exit(f"Could not read the service ({status}).")
+    health_status, health = _http("/health")
+    runtime = metrics.get("runtime", {}) or {}
+    deployment = metrics.get("deployment", {}) or {}
+    cfg = metrics.get("config", {})
+
+    print("\n  STEP 2 of 5 — INFRA")
+    print("  Somebody is paying to keep this running. This step sends no")
+    print("  traffic; it only reads what is already there.\n")
+    print(_rule("where nimbus runs"))
+    print()
+    backend = cfg.get("MODEL_BACKEND", runtime.get("provider", "unknown"))
+    platform = {"google": "Google Cloud Run", "ollama": "local container",
+                "local": "this machine"}.get(backend, backend)
+    rows = [("platform", platform),
+            ("service", deployment.get("service", "local")),
+            ("revision", deployment.get("revision", "local"))]
+    if runtime.get("model_large"):
+        rows.append(("model (large)", runtime["model_large"]))
+    if runtime.get("model_small"):
+        rows.append(("model (small)", runtime["model_small"]))
+    if health_status == 200:
+        rows.append(("capacity", f"{health.get('capacity')} requests at once"))
+        rows.append(("notes", f"{health.get('note_chunks')} chunks indexed"))
+    for label, value in rows:
+        print(f"    {label:<18}{value}")
+
+    runs = _runs()
+    if runs:
+        print()
+        print(_rule("your monthly bill has two halves"))
+        print()
+        print("\n".join(cost_split(json.loads(runs[-1].read_text()), SCENARIO)))
+        print()
+        print("    You pay the second line whether or not anyone asks a question.")
+    else:
+        print("\n  Run `nimbus benchmark` first to see what this costs per month.")
+    print("\n".join(_steps_footer(2)))
+
+
+# ── STEP 3 ───────────────────────────────────────────────────────────────
+def cmd_monitor(args):
+    """Where one representative slow request spent its time.
+
+    Attribution only. This names the largest contributor and what is sitting at
+    its calibrated normal -- ruling a suspect out is half a diagnosis -- and it
+    stops there. Naming the lever that fixes it would end the exercise.
+
+    Reads the saved run, so it sends no traffic and can be run repeatedly.
+    """
+    from report import stage_histogram, summarise, _baseline, LEDGER_LABELS
+    payload = _last_payload()
+    s = summarise(payload, SCENARIO)
+    slo, _, _ = _targets()
+
+    print("\n  STEP 3 of 5 — MONITOR")
+    print("  A total tells you there is a problem. A breakdown tells you where.")
+    print("  This step sends no traffic.\n")
+    print(_rule(f"where the {s['p95']:.2f} s goes"))
+    print()
+    print("\n".join(stage_histogram(s["ledger"])))
+    print()
+    ledger = s["ledger"]
+    total = sum(ledger.values()) or 1.0
+    top_key, top_value = max(ledger.items(), key=lambda kv: kv[1])
+    print(f"    These rows add up to one request, so a share is real: "
+          f"{LEDGER_LABELS[top_key]}")
+    print(f"    is {top_value / total * 100:.0f}% of it.")
+
+    print()
+    print(_rule("already normal — not your problem"))
+    print()
+    steady, moved = [], []
+    for value, key, label in ((s["tokens_in_mean"], "tokens_in", "tokens in"),
+                              (s["tokens_out_mean"], "tokens_out", "tokens out")):
+        base = _baseline(SCENARIO, key, s["provider"])
+        if not base:
+            print(f"    {label:<18}{value:>6,.0f}   not calibrated here")
+            continue
+        delta = (value - base) / base
+        flag = "✓" if abs(delta) <= NOISE else f"{delta*100:+.0f}%"
+        (steady if abs(delta) <= NOISE else moved).append(label)
+        print(f"    {label:<18}{value:>6,.0f}   {f'baseline {base:,.0f}':<16}{flag}")
+    print(f"    {'provider retries':<18}{s['upstream_retries']:>6}   "
+          f"{'baseline 0':<16}{'✓' if not s['upstream_retries'] else '!'}")
+    print()
+    if steady:
+        print(f"    {', '.join(steady)} at baseline — the model is doing a normal")
+        print(f"    amount of work. Whatever is slow, it is not the amount of text.")
+    if s["over_slo"] and slo:
+        print(f"    {s['over_slo']} of {s['ok']} requests missed the {slo:.2f} s target.")
+    print("\n".join(_steps_footer(3)))
+
+
+# ── STEP 4 ───────────────────────────────────────────────────────────────
+def _show(value):
+    """One rendering for a lever value, whether it came from JSON or the menu.
+
+    The service reports booleans as JSON true/false and the menu carries them as
+    strings, so a raw print gives "True -> true" and reads like a bug.
+    """
+    if isinstance(value, bool):
+        return "on" if value else "off"
+    text = str(value)
+    if text.lower() in {"true", "false"}:
+        return "on" if text.lower() == "true" else "off"
+    return "unset" if value is None else text
+
+
+def _current_values():
+    status, metrics = _http("/metrics")
+    return metrics.get("config", {}) if status == 200 else {}
+
+
+def _ask(prompt, valid, default=None):
+    """One keystroke, validated, with a non-interactive escape hatch.
+
+    Typing is the tax this whole redesign exists to remove: a first-year in a
+    twenty-minute lab should be spending their attention on which option is
+    right, not on shell quoting.
+    """
+    while True:
+        try:
+            raw = input(prompt).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            sys.exit("Cancelled — nothing was changed.")
+        if not raw and default is not None:
+            return default
+        if raw in valid:
+            return raw
+        print(f"    Please answer one of: {', '.join(sorted(valid))}")
+
+
+def cmd_optimize(args):
+    """Predict, change ONE setting, and measure again.
+
+    The prediction is the whole pedagogical point and it costs one keystroke.
+    It is taken BEFORE the change is applied, because a prediction offered after
+    the result is not a prediction. The service's own hypothesis gate is
+    satisfied from the measurement that is already on screen, and the sentence
+    that gets recorded is printed back so the team can see -- and copy -- what
+    they committed to.
+    """
+    from report import summarise, LEDGER_LABELS
+    payload = _last_payload()
+    before = summarise(payload, SCENARIO)
+    slo, _, _ = _targets()
+    current = _current_values()
+
+    print("\n  STEP 4 of 5 — OPTIMIZE")
+    print("  Change one thing. Say what you expect first, then find out.\n")
+
+    # ── choose ───────────────────────────────────────────────────────────
+    choice = args.choice
+    if choice is None:
+        print("  Pick ONE thing to change:\n")
+        for index, option in enumerate(OPTIONS, 1):
+            print(f"    {index}  {option['say']}")
+            for line in textwrap.wrap(option["how"], 62):
+                print(f"       {line}")
+            now, target = _show(current.get(option["lever"])), _show(option["value"])
+            already = "   (already set)" if now == target else ""
+            print(f"       {option['lever']}: {now} → {target}{already}\n")
+        choice = int(_ask("  Your pick (1-5) > ",
+                          {str(i) for i in range(1, len(OPTIONS) + 1)}))
+    if not 1 <= choice <= len(OPTIONS):
+        sys.exit(f"Pick a number between 1 and {len(OPTIONS)}.")
+    option = OPTIONS[choice - 1]
+
+    # ── predict ──────────────────────────────────────────────────────────
+    predicted = args.predict
+    if predicted is None:
+        print(f"\n  You chose: {option['say']}")
+        print(f"  That sets {option['lever']} to {option['value']}.\n")
+        predicted = {"u": "up", "d": "down", "s": "same"}[
+            _ask("  Predict: does p95 latency go (u)p, (d)own or stay the (s)ame? > ",
+                 {"u", "d", "s"})]
+
+    # ── record it, in the words of the measurement already on screen ─────
+    ledger = before["ledger"]
+    total = sum(ledger.values()) or 1.0
+    top_key, top_value = max(ledger.items(), key=lambda kv: kv[1])
+    slice_name = LEDGER_LABELS[top_key]
+    proof = (f"{top_value / 1000:.2f}s of a {before['p95']:.2f}s p95 request "
+             f"({top_value / total * 100:.0f}%)")
+    sentence = (f"{slice_name} dominates ({proof}). Setting "
+                f"{option['lever']}={option['value']} should make p95 go {predicted}.")
+
+    status, resp = _http("/hypothesis", "POST", {
+        "dominant_slice": slice_name[:64],
+        "model_implicated": top_key == "generate",
+        "proof_metric": proof[:200],
+        "predicted_lever": option["lever"],
+        "predicted_direction": f"p95 {predicted}"})
+    if status != 200:
+        sys.exit(f"Could not record your prediction ({status}): "
+                 f"{resp.get('error', resp)}")
+
+    print()
+    print("  Recorded — this is your writeup sentence, copy it:")
+    print(f"    \"{sentence}\"")
+
+    # ── apply ────────────────────────────────────────────────────────────
+    status, resp = _http("/levers", "POST", {option["lever"]: option["value"]})
+    if status == 409:
+        sys.exit("The service wants a diagnosis first, and this one was "
+                 "rejected. Ask a facilitator.")
+    if status != 200:
+        sys.exit(f"Rejected: {resp.get('detail') or resp.get('error')}")
+    for key, value in resp["changed"].items():
+        print(f"\n  Applied: {key}  {resp['previous'][key]} → {value}")
+    print("  (the cache was cleared, so this is measured fresh)")
+
+    # ── measure again, same traffic ──────────────────────────────────────
+    d = _traffic()
+    print()
+    after_payload = _run_benchmark(
+        f"{option['lever']}={option['value']}; predicted p95 {predicted}",
+        d["requests"], d["rate"], d["concurrency"], show_report=False)
+    after = summarise(after_payload, SCENARIO)
+
+    after_payload["prediction"] = {"lever": option["lever"],
+                                   "value": option["value"],
+                                   "direction": predicted,
+                                   "p95_before": before["p95"],
+                                   "p95_after": after["p95"],
+                                   "sentence": sentence}
+
+    # ── grade the prediction, not the outcome ────────────────────────────
+    change = ((after["p95"] - before["p95"]) / before["p95"]
+              if before["p95"] else 0.0)
+    if abs(change) < NOISE:
+        actual = "same"
+    else:
+        actual = "down" if change < 0 else "up"
+    # A move in the right direction that is smaller than the run-to-run noise
+    # is not a wrong prediction -- it is an unresolved one. Calling it WRONG
+    # teaches a first-year to distrust a correct instinct, which is the exact
+    # opposite of the lesson.
+    drifted = predicted in ("up", "down") and predicted == (
+        "down" if change < 0 else "up")
+    if actual == predicted:
+        verdict, correct = "CORRECT", True
+    elif actual == "same" and drifted:
+        verdict, correct = "TOO CLOSE TO CALL", None
+    else:
+        verdict, correct = "WRONG", False
+    after_payload["prediction"]["actual"] = actual
+    after_payload["prediction"]["correct"] = correct
+    (_run_dir() / f"run-{after_payload['run']}.json").write_text(
+        json.dumps(after_payload, indent=2))
+
+    print()
+    print(_rule("did it move the way you said?"))
+    print()
+    print("\n".join(_gap_panel(after_payload)))
+    print()
+    print(f"    p95   {before['p95']:.2f} s → {after['p95']:.2f} s "
+          f"({change * 100:+.0f}%)")
+    print(f"    you predicted {predicted.upper()} · it went {actual.upper()} · "
+          f"{verdict}")
+    if correct is None:
+        print()
+        print("    It moved the way you said, but by less than the ~12% this")
+        print("    workload varies between identical runs -- so the number")
+        print("    cannot tell them apart yet. Run it again to find out.")
+    elif not correct:
+        print()
+        print("    A wrong prediction is a result. It rules this setting out,")
+        print("    which is worth more than a lucky guess. Write down why you")
+        print("    expected otherwise, then try another.")
+    elif actual == "same":
+        print()
+        print("    Nothing moved outside the noise. That is real information:")
+        print("    this setting does not touch whatever is slow.")
+    if after["p95"] and slo and after["p95"] <= slo:
+        print()
+        print("    ✓ LATENCY PASS — but fast is not the same as correct.")
+        print("      Check the answers:  nimbus guard")
+    else:
+        print()
+        print("    Still over. Run `nimbus optimize` again, or restore this")
+        print("    setting first if it made things worse.")
+    print("\n".join(_steps_footer(4)))
+
+
+# ── STEP 5 ───────────────────────────────────────────────────────────────
+def cmd_guard(args):
+    """Did the answers survive the optimisation?
+
+    A latency/cost 2/2 is not recovery, and this is the step that says so. It
+    also prints the results table already filled in from the team's own runs --
+    transcribing eight rows by hand is where a twenty-minute session runs out
+    of clock, and it is free to fix.
+    """
+    from report import summarise, recovery, LEDGER_LABELS
+    runs = _runs()
+    if not runs:
+        sys.exit("Nothing measured yet. Start with `nimbus benchmark`.")
+
+    print("\n  STEP 5 of 5 — GUARD")
+    print("  Fast and cheap is not the same as working. This asks 36 real")
+    print("  questions and reads the answers.\n")
+
+    path = runs[-1]
+    payload = json.loads(path.read_text())
+    status, metrics = _http("/metrics")
+    if status != 200 or config_signature(metrics) != payload.get("config_signature"):
+        sys.exit("The configuration changed after your last measurement. Run "
+                 "`nimbus optimize` or `nimbus benchmark` again before checking "
+                 "quality, so the two describe the same service.")
+
+    cfg = _load()
+    print("  asking 36 questions (this makes real model calls)...", flush=True)
+    # Credentials go through the environment, never process arguments.
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "facilitators" / "eval.py"), "--url", cfg["url"]],
+        env={**os.environ, "NIMBUS_ADMIN_TOKEN": cfg.get("token", "")},
+        capture_output=True, text=True)
+    if result.returncode:
+        sys.exit("Quality evaluation failed; recovery remains unverified.")
+    quality = json.loads(result.stdout)
+
+    status, after = _http("/metrics")
+    if status != 200 or config_signature(after) != payload["config_signature"]:
+        sys.exit("The configuration changed while the answers were being "
+                 "checked. Measure and check again.")
+
+    payload["quality"] = {k: quality[k] for k in
+                          ("score_pct", "extraction_pct", "reasoning_pct", "hits", "total")}
+    payload["quality"]["signature"] = payload["config_signature"]
+    path.write_text(json.dumps(payload, indent=2))
+
+    _, _, bar = _targets()
+    print()
+    print(_rule("did the answers survive?"))
+    print()
+    print(f"    {'fact-finding':<18}{quality['extraction_pct']:>5.0f}%")
+    print(f"    {'reasoning':<18}{quality['reasoning_pct']:>5.0f}%")
+    print(f"    {'overall':<18}{quality['score_pct']:>5.0f}%   bar {bar}%   "
+          f"{'PASS' if quality['score_pct'] >= bar else 'FAIL'}")
+    print()
+    print("    This is a keyword check, not a grader. A wrong answer can")
+    print("    contain the right words. Read a few yourself in the browser.")
+
+    # ── the scorecard ────────────────────────────────────────────────────
+    first = json.loads(runs[0].read_text())
+    a, b = summarise(first, SCENARIO), summarise(payload, SCENARIO)
+    # The NET change per lever, not a log of every attempt. A team that tried a
+    # setting, put it back, and tried another has one configuration to report --
+    # listing RETRIEVE_K twice describes their afternoon, not their service.
+    net = {}
+    status, decl = _http("/declarations")
+    if status == 200:
+        for entry in decl.get("declarations", []):
+            if entry.get("kind") == "change":
+                net.update(entry.get("after") or {})
+    changes = [f"{k}={_show(v)}" for k, v in net.items()]
+
+    def top(s):
+        ledger = s["ledger"]
+        if not any(ledger.values()):
+            return "—"
+        return LEDGER_LABELS[max(ledger, key=lambda k: ledger[k])]
+
+    def money(s):
+        return f"${s['usd_per_month']:,.0f}" if s["usd_per_month"] is not None else "unknown"
+
+    quality_before = (f"{first['quality']['score_pct']:.0f}%"
+                      if first.get("quality") else "not measured")
+    rows = [("setting changed", "—", ", ".join(changes) or "none"),
+            ("requests / rate / conc",
+             f"{first['args']['requests']}/{first['args']['rate']}/{first['args']['concurrency']}",
+             f"{payload['args']['requests']}/{payload['args']['rate']}/{payload['args']['concurrency']}"),
+            ("ok / shed / failed", f"{a['ok']}/{a['shed']}/{a['failed']}",
+             f"{b['ok']}/{b['shed']}/{b['failed']}"),
+            ("p95 latency", f"{a['p95']:.2f} s", f"{b['p95']:.2f} s"),
+            ("largest stage", top(a), top(b)),
+            ("cost / month", money(a), money(b)),
+            ("answer quality", quality_before, f"{quality['score_pct']:.0f}%")]
+
+    print()
+    print(_rule("your scorecard — copy this into your notes"))
+    print()
+    print(f"    {'':<24}{'before':<18}{'after'}")
+    for label, was, now in rows:
+        wrapped = textwrap.wrap(str(now), 34) or [""]
+        print(f"    {label:<24}{str(was):<18}{wrapped[0]}")
+        for extra in wrapped[1:]:
+            print(f"    {'':<24}{'':<18}{extra}")
+
+    state = recovery(payload, SCENARIO)
+    print()
+    for label, ok in (("latency target", state["latency_ok"]),
+                      ("cost budget", state["cost_ok"]),
+                      ("every request served", state["availability_ok"]),
+                      ("answer quality", state["quality_ok"]),
+                      ("config held still", state["configuration_stable"])):
+        print(f"    {'✓' if ok else '✗'} {label}")
+    print()
+    print(f"    RECOVERY  {'PASS' if state['recovered'] else 'NOT PROVEN'}")
+    if not state["recovered"]:
+        print("    Say which condition failed and what you would measure next.")
+        print("    A well-supported diagnosis is a result; an unproven claim is not.")
+
+    prediction = payload.get("prediction")
+    if prediction:
+        print()
+        print(f"    You predicted p95 would go {prediction['direction'].upper()}; "
+              f"it went {prediction.get('actual', '?').upper()}.")
+    print("\n".join(_steps_footer(5)))
+    if not state["recovered"]:
+        sys.exit(1)
+
 def main():
     p = argparse.ArgumentParser(prog="nimbus", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -328,7 +1010,36 @@ def main():
         b.add_argument("--concurrency", type=int)
         b.set_defaults(func=fn)
 
+    # ── the five steps ───────────────────────────────────────────────
+    for name, fn in (("benchmark", cmd_benchmark),):
+        b = sub.add_parser(name, help="step 1 - measure it, and price the model")
+        b.add_argument("--label", default="")
+        b.add_argument("--requests", type=int)
+        b.add_argument("--rate", type=float)
+        b.add_argument("--concurrency", type=int)
+        b.set_defaults(func=fn)
+
+    sub.add_parser("infra", help="step 2 - where it runs and what that costs"
+                   ).set_defaults(func=cmd_infra)
+    sub.add_parser("monitor", help="step 3 - where the time goes"
+                   ).set_defaults(func=cmd_monitor)
+
+    o = sub.add_parser("optimize", help="step 4 - change one thing, measure again")
+    o.add_argument("choice", nargs="?", type=int,
+                   help="1-5; omit to be shown the menu")
+    o.add_argument("--predict", choices=("up", "down", "same"),
+                   help="skip the prompt and state your prediction")
+    o.set_defaults(func=cmd_optimize)
+
+    sub.add_parser("guard", help="step 5 - check the answers survived"
+                   ).set_defaults(func=cmd_guard)
+
     sub.add_parser("diagnose").set_defaults(func=cmd_diagnose)
+
+    r = sub.add_parser("requests")
+    r.add_argument("--slow", action="store_true",
+                   help="only the requests that missed the latency target")
+    r.set_defaults(func=cmd_requests)
 
     h = sub.add_parser("hypothesis")
     h.add_argument("--slice", required=True,

@@ -1,4 +1,4 @@
-"""Nimbus -- the study assistant you deploy, benchmark and scale.
+"""Nimbus -- the cafe ordering assistant you deploy, benchmark and scale.
 
 Request path, and where the time goes:
 
@@ -185,7 +185,7 @@ async def verify_models(x_nimbus_admin_token: str | None = Header(default=None))
         return JSONResponse({"error": "service is still starting"}, status_code=503)
     results = {}
     async with _state["semaphore"]:
-        prompt = "Explain Big-O notation briefly. It describes growth of running time with input size."
+        prompt = "Explain briefly what a flat white is. It is a double ristretto with steamed milk, served in an 8 oz cup."
         for tier in ("large", "small"):
             stats = {}
             try:
@@ -366,7 +366,7 @@ async def ask(body: Ask):
 
     # ── Load shedding ────────────────────────────────────────────────────
     # Fail fast and honestly rather than time out slowly. Every shed request
-    # is still a student who did not get an answer.
+    # is still a customer who did not get an answer.
     if config.SHED_ABOVE_QUEUE is not None and _state["waiting"] > config.SHED_ABOVE_QUEUE:
         _state["shed"] += 1
         return JSONResponse(
@@ -427,7 +427,7 @@ async def ask(body: Ask):
                              "Semantic cache hit · retrieval and generation skipped",
                              timer.stages["cache"] * 1000,
                              result=cache_lookup)
-                yield _trace(request_id, "retrieve", "skipped", "Retrieve course notes",
+                yield _trace(request_id, "retrieve", "skipped", "Retrieve menu notes",
                              "Skipped because the response cache returned an answer")
                 yield _trace(request_id, "assemble", "skipped", "Build grounded prompt",
                              "Skipped because the response cache returned an answer")
@@ -435,7 +435,7 @@ async def ask(body: Ask):
                 yield _trace(request_id, "cache", "running", "Check prompt cache",
                              "No reusable response yet · checking after retrieval")
                 current_stage = "retrieve"
-                yield _trace(request_id, "retrieve", "running", "Retrieve course notes",
+                yield _trace(request_id, "retrieve", "running", "Retrieve menu notes",
                              f"Searching {retrieval.size()} indexed note chunks")
                 with timer.stage("retrieve"):
                     # Injected inside the stage timer on purpose: degradation
@@ -446,7 +446,7 @@ async def ask(body: Ask):
                     await incident.delay("retrieve", question)
                     sources = retrieval.search_details(question, config.RETRIEVE_K)
                     chunks = [source["text"] for source in sources]
-                yield _trace(request_id, "retrieve", "complete", "Retrieve course notes",
+                yield _trace(request_id, "retrieve", "complete", "Retrieve menu notes",
                              f"Selected {len(sources)} relevant chunk(s)",
                              timer.stages["retrieve"] * 1000,
                              sources=[{key: source[key] for key in ("source", "title", "excerpt", "score")}
@@ -454,7 +454,7 @@ async def ask(body: Ask):
 
                 current_stage = "assemble"
                 yield _trace(request_id, "assemble", "running", "Build grounded prompt",
-                             "Combining course notes with the student question")
+                             "Combining menu notes with the customer question")
                 with timer.stage("assemble"):
                     prompt = levers.build_prompt(question, chunks)
                 yield _trace(request_id, "assemble", "complete", "Build grounded prompt",

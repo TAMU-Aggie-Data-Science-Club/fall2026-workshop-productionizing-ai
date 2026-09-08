@@ -68,7 +68,7 @@ INCIDENTS = {
         "traffic": _SURGE,
         "expect": {"dominant": "queue"},
         "title": "Finals week",
-        "public_symptom": "Every student is waiting, and it is worse at busy times.",
+        "public_symptom": "Every customer is waiting, and it is worse at busy times.",
         "user_impact": "Answers that used to arrive in seconds now take most of a minute.",
         # Nothing injected. The bottleneck is real: admission of ONE request
         # against an offered concurrency of 8. Stated explicitly rather than
@@ -177,7 +177,7 @@ INCIDENTS = {
         "expect": {"signal": "retries", "at_least": 3},
         "title": "The provider is having a day",
         "public_symptom": "Mostly fine. Occasionally terrible. A few outright failures.",
-        "user_impact": "One student in six waits twice as long; one in two hundred gets nothing.",
+        "user_impact": "One customer in six waits twice as long; one in two hundred gets nothing.",
         # 0.25, chosen by measuring the ACTUAL corpus rather than from the
         # binomial. The fault is seeded from the assembled prompt, so for a
         # fixed corpus and configuration the same requests fault every run --
@@ -244,7 +244,7 @@ INCIDENTS = {
         "expect": {"infra_passes": True},
         "title": "The cheap-model shortcut",
         "public_symptom": "Fast and cheap. Tutors say answers got shallow.",
-        "user_impact": "Simple questions are fine. The ones students actually struggle with are not.",
+        "user_impact": "Simple questions are fine. The ones customers actually need answered are not.",
         "env": {**HEALTHY_ENV, "NIMBUS_MODEL_TIER": "small"},
         "private_truth": "Every request goes to the small model.",
         "discriminator": ("quality fails on REASONING while extraction holds -- the "

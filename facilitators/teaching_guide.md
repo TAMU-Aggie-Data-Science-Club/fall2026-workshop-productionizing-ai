@@ -10,14 +10,14 @@ request students can see, then use the technical name consistently.
 By the end, each team should be able to trace a request, interpret a benchmark,
 test a prediction, assess recovery, and name the additional controls needed for
 an agent that takes actions. The evidence is their completed
-[results table](../README.md#6-explain-your-result) and explanation of a measured change.
+[results table](../README.md#step-5--guard) and explanation of a measured change.
 A well-supported diagnosis of an unresolved incident can demonstrate learning.
 
 Before the session:
 
 - Follow the run sheet to deploy and validate one service per team. Rehearse
   baseline, one change, benchmark, and evaluation with the actual deployment.
-- Ask participants to complete [README setup](../README.md#1-connect-to-your-teams-service).
+- Ask participants to complete [README setup](../README.md#connect).
   Confirm `nimbus status` works as well as `nimbus brief`.
 - Prepare a separate demonstration service or a recent report from a validated
   rehearsal. Label saved results with the date, service, and workload. Remove
@@ -48,11 +48,16 @@ wrong, unavailable, or too expensive to serve at scale. Today your team owns
 those outcomes.” Define productionizing as making an application dependable
 for its intended users and measuring whether it meets their needs.
 
-Draw or display the request path in the [README](../README.md#2-see-how-an-answer-is-produced).
-Use “When are office hours?” to connect a question, a relevant syllabus passage,
+Draw or display the request path in the [README](../README.md#how-an-answer-is-produced).
+Use “Is the banana bread vegan?” to connect a question, the relevant menu note,
 and an answer. Explain that retrieval finds material and generation writes the
 response. A cache stores work for reuse. A token is a model's unit of text;
 distinguish it from the private credential also called a team token.
+
+Say plainly that Nimbus knows one cafe and nothing else, and demonstrate a
+refusal on purpose — ask it where the nearest printer is. A bounded scope is
+what makes the service small enough to reason about in twenty minutes, and a
+team that meets the refusal by accident tends to assume the service is broken.
 
 Explain the scope directly: Nimbus follows a sequence defined by code. An agent
 can let a model choose a next tool action and continue based on its result. The
@@ -74,8 +79,9 @@ On the demonstration service, ask one browser question. Point out the answer,
 source excerpts, and trace. Explain that the trace records application stages;
 it does not expose the model's private reasoning. A cache hit can skip stages.
 
-Show `nimbus brief`, `nimbus status`, and a completed baseline report. Use a
-prepared, labeled report if the live command would consume the demonstration.
+Show `nimbus brief` and a completed `nimbus benchmark`. Use a prepared, labeled
+report if the live command would consume the demonstration. Point at the gap bar
+first — the distance from target is the thing every later step moves.
 Read outcomes first, then latency and cost targets, then the `p95 req` breakdown.
 Explain that p95 describes the slow end of the successful sample and becomes
 noisy with few requests. `p95 req` adds up for one request; `p95 each` does not.
@@ -94,19 +100,23 @@ Teams follow [the README](../README.md). Assign a
 terminal operator, evidence reader, and recorder; combine roles when needed.
 Keep traffic to one operator per team and apply settings between complete runs.
 
-| Lab minute | Team action | Facilitator prompt |
+| Lab minute | Step | Facilitator prompt |
 | --- | --- | --- |
-| 0–2 | Read brief, settings, and one answer | “What is the user experiencing, and what is the target?” |
-| 2–5 | Run baseline and diagnose | “Which number supports that observation?” |
-| 5–8 | Record a hypothesis and prediction | “What should move if your explanation is right?” |
-| 8–13 | Change one setting and benchmark | “Did you keep the traffic the same? What changed besides latency?” |
-| 13–17 | Evaluate and inspect answers | “Does the recovery check pass? Is any answer still wrong?” |
-| 17–20 | Complete the evidence statement | “What can you conclude, and what remains uncertain?” |
+| 0–4 | `nimbus brief`, one browser question, `nimbus benchmark` | “What is the user experiencing, and what is the target?” |
+| 4–6 | `nimbus infra` | “Which half of that bill would you actually be able to reduce?” |
+| 6–9 | `nimbus monitor` | “Which number rules the model out?” |
+| 9–15 | `nimbus optimize`, two or three times | “You predicted down. Why did it not move?” |
+| 15–18 | `nimbus guard` | “Latency passed. Did the answers?” |
+| 18–20 | Read the printed scorecard aloud | “What can you conclude, and what remains uncertain?” |
+
+Steps 2 and 3 send no traffic, so a team that is behind can run them while
+another team's benchmark is in flight. Step 4 is the repeatable one: budget for
+two or three attempts, and treat a wrong prediction as a result worth naming.
 
 If a team is stuck, first ask them to locate a missed target, then a relevant
-report row, then a plausible explanation. Let them choose the setting from the
-reference. The hypothesis gate checks existence, not correctness. Students must
-still make and justify one change at a time.
+report row, then a plausible explanation. Let them choose from the five options
+`nimbus optimize` offers. The prediction gate checks that they committed to one,
+not that they were right. Students must still justify one change at a time.
 
 A setting may reduce time while damaging answers. Ask teams to inspect the
 facts and explanations rather than celebrating latency alone. If a change makes
