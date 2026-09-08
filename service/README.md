@@ -185,7 +185,7 @@ make docker-reload
 
 For Cloud Run, export `NIMBUS_URL` and `NIMBUS_ADMIN_TOKEN` before `make
 metrics` or `make reload`. Participants use their own team URL/token through
-`cli/nimbus`; see the [participant quickstart](../participants/quickstart.md).
+`cli/nimbus`; see the [workshop README](../README.md).
 Use `nimbus set` for remote changes: `/reload` cannot read laptop edits into a
 deployed container. The browser page at `/` provides chat and request traces.
 

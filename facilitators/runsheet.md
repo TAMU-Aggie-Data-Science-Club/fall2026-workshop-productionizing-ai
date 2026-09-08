@@ -1,11 +1,13 @@
 # Nimbus facilitator run sheet
 
-Twenty-minute symptom-first investigation, using predeployed Cloud Run services.
-This is for facilitators. Follow [cloud operations](../deploy/README.md) and
-[development evidence](../docs/DEVELOPMENT_LOG.md) before handing out URLs.
+Operations for the 20-minute team investigation within the 50-minute workshop.
+Use the [teaching guide](teaching_guide.md) for concepts, demonstration, and agent
+design discussion. Follow [cloud operations](../deploy/README.md) before handing
+out URLs.
 
-The whole organiser path is four commands and about twenty minutes, run the day
-before. Only the handout assembly grows with the size of the room.
+Prepare the day before and rehearse with the actual deployment. Build, deployment,
+model calls, and team count determine preparation time; leave time to resolve
+preflight failures.
 
 ## Deploying the room
 
@@ -97,17 +99,19 @@ gcloud secrets versions access latest --secret=nimbus-team-a-token \
   --project=adsc-nimbus
 ```
 
-Send each team **one private message** containing only its own block, with the
+Send each team **one private message** containing its own setup block, with the
 credentials already filled in, so nobody types a credential or picks the wrong
-block out of a wall of text. Include the URL, the token and nothing about the
-incident.
+block out of a wall of text. Include the [workshop README](../README.md) as the only participant guide. Include no incident assignment or answer key.
 
 ```bash
-git clone https://github.com/anh-nguyen28/adsc-workshop.git && cd adsc-workshop
-python3 -m venv .participant-venv && .participant-venv/bin/pip install -q httpx==0.28.1
+git clone https://github.com/anh-nguyen28/adsc-workshop.git
+cd adsc-workshop
+python3 -m venv .participant-venv
+.participant-venv/bin/python -m pip install httpx==0.28.1
 export PATH="$PWD/.participant-venv/bin:$PWD/cli:$PATH"
 nimbus init https://nimbus-team-a-xxxx.run.app team-a-nimbus-2026
 nimbus brief
+nimbus status
 ```
 
 Cloud Shell is the path of least resistance: git and Python are already there
@@ -123,7 +127,7 @@ environment work instead of `init` if a team prefers that.
   The current default round-2 catalog is prompt and retrieval.
 - Keep the image digest, team/service mapping, traffic profile and recovery
   evidence accessible to facilitators. Do not reveal incident assignments.
-- Distribute the participant blocks and quickstart ahead of time, and ask people
+- Distribute the team setup blocks and README ahead of time, and ask people
   to run the setup paste before the session rather than during it.
 - Use the service's /brief targets. Do not quote old 5-second ladder thresholds.
 - Test venue connectivity and keep a facilitator terminal ready as a fallback.
@@ -133,13 +137,15 @@ environment work instead of `init` if a team prefers that.
 
 | Time | Action |
 | --- | --- |
-| 0–2 | Confirm each team is connected -- `nimbus brief` renders. Explain student impact and the targets. |
+| 0–2 | Confirm `brief` and authenticated `status` work. Read the targets and inspect one browser answer. |
 | 2–5 | Run baseline. Read outcome counts and the additive p95 request ledger. Change nothing. |
 | 5–8 | Diagnose. State the dominant slice or token anomaly and the evidence that rules out alternatives. Record a hypothesis. |
 | 8–13 | Change one setting, benchmark with the same profile, and explain the observed difference. Repeat only if evidence supports another change. |
-| 13–16 | Run eval on the measured configuration; inspect real answers and recovery status. |
-| 16–19 | Compare two teams with different symptoms. Each states evidence, change, resulting user impact and remaining limits. |
-| 19–20 | Close with the distinction between latency, availability, modeled cost and answer quality. |
+| 13–17 | Run eval on the measured configuration; inspect real answers and recovery status. |
+| 17–20 | Complete the README results table and explain evidence, change, user impact, and remaining limits. |
+
+These times start at the team investigation. The teaching guide provides the
+preceding explanation and demonstration and the following agent design discussion.
 
 The gate requires an existing hypothesis, not a correct one. Facilitators enforce
 one change at a time and ask for evidence rather than prescribing a lever.
@@ -156,9 +162,11 @@ change traffic profiles mid-comparison.
 | `Run 'nimbus init' first` | Different machine; the config is per machine | Paste the block again |
 
 `nimbus init` validates the URL only -- `/health` and `/brief` take no
-authentication, so a wrong token passes setup silently and first fails at
-`nimbus baseline`. Treat any `/metrics` complaint as a credential problem, not a
-benchmark problem.
+authentication, so a wrong token passes setup silently and is detected by
+`nimbus status` or `nimbus baseline`. The README setup includes `status`
+so teams check authenticated access before the activity. For a `/metrics`
+complaint, check the URL/token pair first, then service readiness if credentials
+are correct.
 
 Fallback order: pair with a teammate whose terminal works (only one member
 should generate load anyway), then the facilitator terminal, then a spare

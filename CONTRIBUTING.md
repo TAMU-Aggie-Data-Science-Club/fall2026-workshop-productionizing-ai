@@ -93,7 +93,7 @@ against the source. Update it in the same change, not afterwards.
 - **Checks or final output in `facilitators/preflight.py`.** The run sheet lists
   what each check catches and tells facilitators to proceed only on
   `All N service(s) ready to hand out.`
-- **Setup steps in `participants/quickstart.md`.** The paste block in the run
+- **Participant setup steps in `README.md`.** The paste block in the run
   sheet is the same sequence with credentials filled in; the two drift easily.
 - **Anything that changes how long a phase takes.** The minute-by-minute table is
   a budget, not a description.
