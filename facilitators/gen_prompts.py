@@ -1,6 +1,6 @@
 """Generate the frozen question corpus.
 
-Duplicates are DELIBERATE: during finals week many students ask the same thing
+Duplicates are DELIBERATE: at the morning rush many customers ask the same thing
 in the same words, and a few ask it in different words. That mix is what gives
 the cache levers something real to hit.
 
@@ -13,37 +13,38 @@ Cycling a fixed pattern guarantees the same mix at every prefix length.
 import json
 from collections import Counter
 
-# Small hot pool -- the questions everybody asks during finals.
+# Small hot pool -- the questions everybody asks at the morning rush.
 BASE = [
-    "What is Big-O notation?",
-    "What does the learning rate do?",
-    "What is overfitting?",
-    "When are office hours?",
-    "What is cross-validation?",
+    "What is in a flat white?",
+    "Does the oat milk cost extra?",
+    "What time do you close today?",
+    "Is the banana bread vegan?",
+    "How much caffeine is in a cold brew?",
 ]
 
 # Same meaning, different words: exact cache MISSES, semantic cache HITS.
 NEAR = [
-    "What is the role of the learning rate?",
-    "What does it mean for a model to overfit?",
-    "What time are office hours held?",
-    "Can you explain k-fold cross validation?",
+    "What goes into a flat white?",
+    "Do you charge more for oat milk?",
+    "When do you shut this evening?",
+    "Can I eat the banana bread if I am vegan?",
 ]
 
 # The long tail: asked once, never again.
 TAIL = [
-    "Define recursion.", "Define variance.", "What is a p-value?",
-    "Explain the LEGB scope rule in Python.",
-    "What is the difference between a stack and a queue?",
-    "What sorting algorithm does Python use?",
-    "How do I get an extension on an assignment?",
-    "What is feature scaling and when do I need it?",
-    "How long is the midterm?", "What is the normal distribution?",
-    "What happens if I submit an assignment late?",
-    "What is a confidence interval?",
-    "Why do we split data into train, validation and test sets?",
-    "What is L1 regularisation?", "What is a confusion matrix?",
-    "How does binary search work?",
+    "What is a cortado?", "Do you have decaf cold brew?",
+    "Which pastries contain nuts?",
+    "What is the difference between a latte and a cappuccino?",
+    "How does the loyalty card work?",
+    "Can I pay with dining dollars?",
+    "What is the soup today?", "Is the fruit cup gluten free?",
+    "Do you take cash?", "What size is a flat white?",
+    "How long does food take at peak?",
+    "Where do I pick up a mobile order?",
+    "Can I get a mocha without dairy?",
+    "What is on the autumn seasonal menu?",
+    "Do you give a discount for bringing my own cup?",
+    "What happens to unsold pastries at the end of the day?",
 ]
 
 # 10-slot pattern: 6 base (repeats), 2 near (semantic hits), 2 tail (misses).

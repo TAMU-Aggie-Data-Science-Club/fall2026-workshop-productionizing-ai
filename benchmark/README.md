@@ -3,7 +3,7 @@
 The participant path is [cli/nimbus](../cli/nimbus): brief → baseline → diagnose →
 hypothesis → set → bench → eval. It takes the incident's traffic profile from
 /brief and records authenticated configuration, runtime, deployment and session
-identity with every run. See the [participant quickstart](../participants/quickstart.md).
+identity with every run. See the [workshop README](../README.md).
 
 ## Direct engineer benchmark
 

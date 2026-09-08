@@ -35,7 +35,7 @@ make setup
 ```
 
 This creates a virtualenv, installs the pinned dependencies from
-`requirements.txt`, and builds the course-note index. If you are in Codespaces
+`requirements.txt`, and builds the menu-note index. If you are in Codespaces
 this has already happened for you.
 
 ## 3. Start it
@@ -62,7 +62,7 @@ In a second terminal:
 ```bash
 curl -N -X POST http://127.0.0.1:8000/ask \
   -H 'Content-Type: application/json' \
-  -d '{"question":"What does the learning rate do?"}'
+  -d '{"question":"What is in a flat white?"}'
 ```
 
 You get a stream of text, and then a final event with the numbers that matter:
@@ -77,7 +77,7 @@ You get a stream of text, and then a final event with the numbers that matter:
 Open `http://127.0.0.1:8000/` in a browser for the participant deployment
 activity view. It checks `/health` to show whether the service is live, then
 renders a request trace as the answer streams: capacity check, cache lookup,
-course-note retrieval, prompt assembly, model routing, generation, and
+menu-note retrieval, prompt assembly, model routing, generation, and
 completion. The trace also shows the note excerpts selected for grounding and
 the queue-wait versus compute split. These are operational signals, not the
 model's private reasoning.
@@ -105,7 +105,7 @@ Google-managed model when `NIMBUS_MODEL_BACKEND=google` and uses ADC from the
 Cloud Run runtime service account. See [`deploy/README.md`](../deploy/README.md)
 for the cloud-owner inputs, secret setup, and deployment command.
 
-The cloud container builds the course-note embedding/index artifact once. It
+The cloud container builds the menu-note embedding/index artifact once. It
 does not package the local LLM weights, and it does not require a GPU. Admin
 routes (`/metrics` and `/reload`) require `X-Nimbus-Admin-Token` in Cloud Run;
 participant `/` and `/ask` remain public for the workshop.
@@ -160,7 +160,7 @@ app.py          the service: request path, timing, streaming
 model.py        lightweight Hugging Face local adapter
 ollama_model.py Docker-local Ollama/Llama adapter
 cloud_model.py    Google-managed model adapter used by Cloud Run
-retrieval.py      course-note search
+retrieval.py      menu-note search
 levers.py         caches, router, and the long, trimmed, or verbose prompt
 timing.py         the queue-wait / compute stopwatch
 web/index.html    participant browser page
@@ -185,7 +185,7 @@ make docker-reload
 
 For Cloud Run, export `NIMBUS_URL` and `NIMBUS_ADMIN_TOKEN` before `make
 metrics` or `make reload`. Participants use their own team URL/token through
-`cli/nimbus`; see the [participant quickstart](../participants/quickstart.md).
+`cli/nimbus`; see the [workshop README](../README.md).
 Use `nimbus set` for remote changes: `/reload` cannot read laptop edits into a
 deployed container. The browser page at `/` provides chat and request traces.
 

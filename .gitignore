@@ -8,7 +8,9 @@ data/index.npz
 *.swp
 .nimbus-runs/
 
-archive/
+# Preserve retired participant guides while ignoring other local archives.
+/archive/*
+!/archive/participants/
 docs/
 
 # Benchmark output is scratch -- EXCEPT the runs the documents cite as evidence.

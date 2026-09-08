@@ -111,7 +111,7 @@ def check(url: str, token: str) -> list[str]:
             if result.get("usage_source") != "provider":
                 problems.append(f"{tier} tier did not report provider usage")
             print(f"    {tier}: {result.get('model')} ok={result.get('ok')}")
-        answer, stats, error = _ask(url, "What is Big-O notation?")
+        answer, stats, error = _ask(url, "What is in a flat white?")
         if error or not answer.strip() or not stats:
             problems.append("normal /ask returned no complete usable answer")
         after = _get(f"{url}/metrics", token)

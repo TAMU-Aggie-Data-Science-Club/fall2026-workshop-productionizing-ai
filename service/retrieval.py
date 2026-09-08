@@ -1,4 +1,4 @@
-"""Course-note retrieval: one dot product against a prebuilt matrix.
+"""Menu-note retrieval: one dot product against a prebuilt matrix.
 
 No vector database. The index is a few hundred rows of 384 floats -- well under
 a megabyte -- so brute-force cosine similarity is microseconds. A vector DB here
@@ -26,7 +26,7 @@ def search(question: str, k: int) -> list[str]:
 def search_details(question: str, k: int) -> list[dict]:
     """Return note chunks plus safe, user-visible retrieval metadata.
 
-    The browser uses this to explain which course notes grounded an answer.
+    The browser uses this to explain which menu notes grounded an answer.
     It intentionally returns excerpts and similarity scores, not the prompt or
     model's private reasoning.
     """
@@ -38,7 +38,7 @@ def search_details(question: str, k: int) -> list[dict]:
     for i in top:
         text = str(_texts[i])
         source, separator, content = text.partition("] ")
-        source = source.lstrip("[") if separator else "course notes"
+        source = source.lstrip("[") if separator else "menu notes"
         title, separator, excerpt = content.partition(": ")
         if not separator:
             title, excerpt = "Course notes", content

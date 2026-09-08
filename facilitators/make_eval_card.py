@@ -17,7 +17,7 @@ lines = [
     "## How these numbers were produced",
     "",
     "They are **measured**, not estimated. `facilitators/eval.py` asks Nimbus "
-    f"{rows[0]['total']} questions whose answers are known to be in the course notes, and "
+    f"{rows[0]['total']} questions whose answers are known to be in the menu notes, and "
     "checks whether the answer actually carries the fact through. Re-run it with:",
     "",
     "```bash",
@@ -54,7 +54,7 @@ lines += [
     "any model that can copy will pass them, so they mostly measure whether retrieval "
     "worked. **Reasoning** questions require combining notes or applying a rule to a "
     "situation the notes do not state directly. That column is where model capability "
-    "actually shows up, and it is what students genuinely need help with.",
+    "actually shows up, and it is what customers genuinely need answered.",
     "",
     "---",
     "",
@@ -80,7 +80,7 @@ if small is not None and routing is not None:
     lines.append(f"**Routing keeps quality; a blanket downgrade does not.** Easy questions to the "
                  f"small model scores {routing:.0f}%. Sending *everything* to it scores {small:.0f}%. "
                  "The small model is not bad — it is bad at the hard questions, which are the "
-                 "ones students actually need help with.\n")
+                 "ones customers actually need answered.\n")
 if loose is not None and tight is not None:
     if abs(tight - loose) < 3:
         lines.append(

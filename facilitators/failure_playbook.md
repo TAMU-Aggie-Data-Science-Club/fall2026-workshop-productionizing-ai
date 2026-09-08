@@ -1,57 +1,48 @@
-# Failure Playbook
+# Facilitator troubleshooting
 
-**Not for participants.** Read this before the session, not during it.
+Use this with the [run sheet](runsheet.md). The session uses predeployed team
+services and the participant CLI. Keep setup failures separate from the incident
+students are meant to investigate.
 
----
+| Problem | Response |
+| --- | --- |
+| Terminal, Git, Python, or dependency setup fails | Move the operator to Cloud Shell, a working teammate's terminal, or a prepared facilitator terminal; investigate setup separately |
+| `nimbus` is not found | Enter the repository directory and repeat the `export PATH=...` line from the README setup |
+| Service health or connection fails | Confirm that team's URL and service readiness before starting the investigation |
+| `status` rejects the token or baseline needs authenticated `/metrics` | Confirm the URL/token pair; `init` alone does not validate the credential |
+| `set` returns 409 | Have the team record a hypothesis with measured evidence, then retry the intended setting |
+| Every request fails or returns empty text | Stop the investigation and rerun authenticated service preflight; inspect model access and output behavior |
+| Evaluation reports configuration changed | Wait for all traffic and changes to finish; benchmark the current settings, then evaluate again |
+| The service restarts | Inspect settings, restore the intended incident through the facilitator workflow if needed, and begin a new participant session and baseline |
+| A command is taking too long | Check service health and provider errors; reduce repeat experiments or share-out time while preserving evaluation |
 
-## Codespaces will not start / org policy blocks it
+Do not send participants through full local model installation during the cloud
+activity. Keep the same traffic profile before and after a change. Changing
+request count or concurrency mid-comparison makes it a different experiment.
 
-Fall back to local: `git clone`, `make setup`, `make serve`. It is the same
-three commands. `make setup` takes a few minutes the first time, which is why
-the prereq doc asks people to run it at home.
+## Connectivity is unavailable
 
-## `make setup` fails on a laptop
+Before the event, save and print a recent validated baseline, a corresponding
+changed-configuration report, and quality evidence for a demonstration service.
+Include the configuration and workload, and remove tokens. Keep the second
+report hidden until teams have written a prediction.
 
-Most common cause is Python older than 3.10. Check with `python3 --version`.
-Second most common is a corporate proxy blocking the PyTorch CPU index — put
-them in Codespaces or on a spare laptop and move on. **Do not debug pip in front
-of the room.**
+Use those reports to practice interpretation and comparison. State that students
+are analyzing recorded evidence and cannot establish live recovery. If no such
+materials are available, use the clearly labeled arithmetic example in the
+README and the agent design exercise. Do not present historical incident
+panels or invented quality scores as current measurements.
 
-## `make serve` starts but the first request hangs
+## A team finishes early
 
-The models load before the server accepts traffic, so if you see "Nimbus ready"
-it is loaded. A first request that takes 5–10 seconds is normal on a 2-core
-machine. That is the point of the exercise.
+Ask them to explain a remaining uncertainty, inspect another answer against its
+sources, or design a failure test for the calendar-agent extension. An additional
+load experiment is useful only after they save the original evidence and identify
+it as a new workload; it should not replace the original recovery comparison.
 
-## Every benchmark request fails
+## Someone challenges a result
 
-The report will say so explicitly and tell them to check `make serve` is running.
-Usual cause: benchmarking a different port than the server is on, or reloading
-the configuration mid-run. Run `make reload`, wait for it to finish, then start
-the next benchmark.
-
-## The room is too slow — runs are taking too long
-
-Cut the request count: `make bench ARGS="--requests 8"`. Numbers get noisier but
-every lesson still lands. Say out loud that you are trading precision for time —
-that is itself an honest engineering trade.
-
-## Wifi dies completely
-
-Use [`benchmark/paper_track.md`](../archive/paper_track.md). Tables can
-diagnose the incident and make the same configuration decisions from its fixed
-dashboard snapshots, then check the eval card. **This is a degraded session,
-not a cancelled one.**
-
-## Someone challenges the numbers
-
-They are right to. The token prices, the request volume and the eval scores are
-**illustrative and frozen** — say so plainly on the slide and out loud. The
-latency and queueing numbers, however, are real measurements from their own
-machine, and that is the part the activity turns on.
-
-## A table finishes in five minutes
-
-Give them the curveball: `make bench ARGS="--concurrency 16 --requests 32"`, and
-ask whether their configuration still passes. Then ask them to get there while
-using *fewer* levers than they did the first time.
+Use the distinction between observed data and assumptions. Latency and outcomes
+come from that run. Monthly cost is an exercise projection. The quality score
+comes from keyword checks. Small samples, cached answers, and provider variation
+limit conclusions. Inspect the record together and state what remains unknown.

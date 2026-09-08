@@ -131,6 +131,11 @@ def main() -> None:
                          "round-2 incident, duplicating incidents if more)")
     ap.add_argument("--prefix", default="nimbus-team",
                     help="service name prefix when using --all")
+    ap.add_argument("--only",
+                    help="with --all: give every team this ONE incident. Use it "
+                         "when the room should investigate the same fault, so "
+                         "there is a single brief and a single answer key. Still "
+                         "one shared image build, unlike looping --incident.")
     ap.add_argument("--no-gate", action="store_true",
                     help="leave the diagnose-first gate off (round 1)")
     ap.add_argument("--include-experimental", action="store_true",
@@ -142,6 +147,11 @@ def main() -> None:
     if args.all:
         names = sorted(n for n, s in INCIDENTS.items() if s.get("round") == 2
                        and (args.include_experimental or s.get("room_enabled", True)))
+        if args.only:
+            if args.only not in names:
+                ap.error(f"--only {args.only!r} is not selectable here; "
+                         f"have {', '.join(names) or '(none)'}")
+            names = [args.only]
         count = args.teams or len(names)
         # More teams than incidents means duplicates, which is fine: neighbours
         # having different faults is what matters, not every fault being unique.

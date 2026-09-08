@@ -34,7 +34,7 @@ if MODEL_BACKEND not in {"local", "ollama", "google"}:
 
 RESPONSE_CACHE = False
 # Exact-match cache keyed on the fully assembled prompt. During finals week a
-# lot of students ask the same question in the same words. A hit skips retrieval
+# lot of customers ask the same question in the same words. A hit skips retrieval
 # AND generation entirely, so it costs nothing at all.
 #
 # Note this is a RESPONSE cache -- it stores finished answers. That is a
@@ -78,7 +78,7 @@ SYSTEM_PROMPT = "LONG"
 # Every request pays to re-read this. Nobody has ever audited it.
 
 RETRIEVE_K = 4
-# How many course-note chunks get stuffed into the prompt. More context is
+# How many menu-note chunks get stuffed into the prompt. More context is
 # not free: it lands in the prefill on every single request.
 
 
@@ -118,7 +118,7 @@ REPLICAS = 1
 SHED_ABOVE_QUEUE = None
 # Set to an integer to reject requests with 429 + Retry-After once the queue
 # is deeper than this. Failing fast and honestly beats timing out slowly —
-# but every shed request is a student who did not get an answer.
+# but every shed request is a customer who did not get an answer.
 
 
 # ─── RUNTIME OVERRIDES ────────────────────────────────────────────────────

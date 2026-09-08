@@ -113,7 +113,7 @@
     .source-score { color: var(--blue); font-size: 10px; font-weight: 800; }
     .source-meta { margin-top: 3px; color: var(--soft); font-size: 10px; }
     .source-excerpt { margin-top: 7px; color: var(--muted); font-size: 11px; line-height: 1.45; }
-    .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .metric { min-width: 0; padding: 11px; border-radius: 10px; background: #f6f8fb; }
     .metric-label { color: var(--soft); font-size: 10px; font-weight: 750; }
     .metric-value { overflow: hidden; margin-top: 6px; color: var(--navy); font-size: 16px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
@@ -126,6 +126,7 @@
     .legend span { display: inline-flex; align-items: center; gap: 5px; }
     .legend i { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); }
     .legend .queue i { background: #f6a45b; }
+    .scope-note { margin: 0 0 15px; max-width: 62ch; }
     .metrics-note { margin: 15px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 
     @media (max-width: 880px) {
@@ -188,16 +189,21 @@
             <h2 class="card-title">Ask Nimbus</h2>
             <p class="card-kicker">Send a real request to the deployed service.</p>
           </div>
-          <span class="trace-badge">student-facing</span>
+          <span class="trace-badge">customer-facing</span>
         </div>
         <div class="ask-body">
+          <p class="card-kicker scope-note">Nimbus is the ordering assistant for <strong>Rev&rsquo;s Brew</strong>. It
+            answers from the cafe&rsquo;s drinks, food and opening-hours notes, and says so
+            when a question falls outside them. Start with one of these:</p>
           <form id="ask-form">
             <label for="question">Question</label>
-            <textarea id="question" required placeholder="What is overfitting?"></textarea>
+            <textarea id="question" required placeholder="What is in a flat white?"></textarea>
             <div class="ask-actions">
               <div class="samples" aria-label="Example questions">
-                <button class="sample" type="button" data-question="What is overfitting?">Try an example</button>
-                <button class="sample" type="button" data-question="What does the learning rate do?">Learning rate</button>
+                <button class="sample" type="button" data-question="What is in a flat white?">Flat white</button>
+                <button class="sample" type="button" data-question="Is the banana bread vegan?">Vegan?</button>
+                <button class="sample" type="button" data-question="I have a nut allergy. Is a latte safe for me?">Nut allergy</button>
+                <button class="sample" type="button" data-question="What time do you close on Sunday?">Sunday hours</button>
               </div>
               <button id="submit" class="primary" type="submit">Ask Nimbus</button>
             </div>
@@ -249,6 +255,11 @@
             <div class="metric"><div class="metric-label">Compute</div><div id="compute-metric" class="metric-value">—</div></div>
             <div class="metric"><div class="metric-label">Model tier</div><div id="tier-metric" class="metric-value">—</div></div>
             <div class="metric"><div class="metric-label">Cache</div><div id="cache-metric" class="metric-value">—</div></div>
+            <!-- Input and output tokens arrive in the same stats payload as the
+                 rows above. They are shown as a PAIR on purpose: the useful
+                 reading is the comparison between them, not either alone. -->
+            <div class="metric"><div class="metric-label">Input tokens</div><div id="tokens-in-metric" class="metric-value">—</div></div>
+            <div class="metric"><div class="metric-label">Output tokens</div><div id="tokens-out-metric" class="metric-value">—</div></div>
           </div>
           <div class="latency">
             <div class="latency-head"><span>Latency split</span><span id="latency-total">No request yet</span></div>
@@ -256,6 +267,10 @@
             <div class="legend"><span class="queue"><i></i>queue wait</span><span><i></i>compute</span></div>
           </div>
           <p id="metrics-note" class="metrics-note">This split is the workshop’s key diagnostic: a slow queue and a slow model need different fixes.</p>
+          <!-- Without this line a team "fixes" a load-dependent incident here,
+               sees a healthy single request, and concludes it is solved. One
+               unloaded request cannot show queueing: nothing is contending. -->
+          <p class="metrics-note"><strong>One request, no load.</strong> Queueing only appears when requests arrive together — run <code>nimbus bench</code> to see this service under traffic.</p>
         </div>
       </section>
     </div>
@@ -278,7 +293,7 @@
       {stage: 'request', label: 'Request received', idle: 'Waiting for a request'},
       {stage: 'queue', label: 'Capacity check', idle: 'Waiting for an inference slot'},
       {stage: 'cache', label: 'Check response cache', idle: 'Looking for reusable work'},
-      {stage: 'retrieve', label: 'Retrieve course notes', idle: 'Searching the indexed notes'},
+      {stage: 'retrieve', label: 'Retrieve menu notes', idle: 'Searching the indexed menu notes'},
       {stage: 'assemble', label: 'Build grounded prompt', idle: 'Combining notes and question'},
       {stage: 'route', label: 'Select model tier', idle: 'Applying routing policy'},
       {stage: 'generate', label: 'Generate response', idle: 'Streaming the answer'},
@@ -345,6 +360,8 @@
       document.querySelector('#compute-metric').textContent = '—';
       document.querySelector('#tier-metric').textContent = '—';
       document.querySelector('#cache-metric').textContent = '—';
+      document.querySelector('#tokens-in-metric').textContent = '—';
+      document.querySelector('#tokens-out-metric').textContent = '—';
       document.querySelector('#latency-total').textContent = 'In progress';
       document.querySelector('#queue-bar').style.width = '0%';
       document.querySelector('#compute-bar').style.width = '0%';
@@ -372,6 +389,12 @@
       document.querySelector('#compute-metric').textContent = formatMs(compute);
       document.querySelector('#tier-metric').textContent = stats.tier === '-' ? 'cache' : (stats.tier || '—');
       document.querySelector('#cache-metric').textContent = (stats.cache || 'miss').replace('-', ' ');
+      // A cache hit makes no model call and reports zero tokens. Showing "0"
+      // would read as "this request got smaller" rather than "this request did
+      // not happen", so say which one it was.
+      const served = (stats.cache || 'miss') !== 'miss';
+      document.querySelector('#tokens-in-metric').textContent = served ? 'cached' : (stats.tokens_in ?? '—');
+      document.querySelector('#tokens-out-metric').textContent = served ? 'cached' : (stats.tokens_out ?? '—');
       document.querySelector('#latency-total').textContent = `total ${formatMs(total)}`;
       document.querySelector('#queue-bar').style.width = `${total ? (queue / total) * 100 : 0}%`;
       document.querySelector('#compute-bar').style.width = `${total ? (compute / total) * 100 : 0}%`;

@@ -1,4 +1,4 @@
-"""Chunk the course notes, embed them, and save a single .npz index.
+"""Chunk the menu notes, embed them, and save a single .npz index.
 
 Run once at image build time -- never at request time. The result is a matrix
 small enough (a few hundred rows) that cosine similarity with one numpy dot
@@ -13,7 +13,7 @@ import numpy as np
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "service"))
 from embed import embed_texts  # noqa: E402
 
-NOTES_DIR = pathlib.Path(__file__).parent / "course_notes"
+NOTES_DIR = pathlib.Path(__file__).parent / "menu"
 OUT = pathlib.Path(__file__).parent / "index.npz"
 
 
