@@ -96,7 +96,7 @@ INCIDENTS = {
         "expect": {"dominant": "retrieve"},
         "title": "The new vector store",
         "public_symptom": "Slow to START answering. The answer itself reads fine.",
-        "user_impact": "Students stare at a blank box, then get a good answer.",
+        "user_impact": "Customers stare at a blank box, then get a good answer.",
         # Sized against the deployment it runs on, because "dominant" is a
         # RATIO and generation time is the denominator. Managed Gemini answers
         # in about 1.2s at p95, so a realistic p95 of 1.8s for a degraded vector
@@ -147,7 +147,7 @@ INCIDENTS = {
         "expect": {"signal": "tokens_out", "at_least_x": 3.0},
         "title": "Helpfulness creep",
         "public_symptom": "Answers begin instantly, then crawl to the end.",
-        "user_impact": "Students read the first line and wait for the rest.",
+        "user_impact": "Customers read the first line and wait for the rest.",
         # This is the incident where the model REALLY is the bottleneck. Without
         # it, "never blame the LLM" becomes the winning strategy -- the same
         # reflex the activity exists to break, pointed the other way.
@@ -221,7 +221,7 @@ INCIDENTS = {
         "expect": {"infra_passes": True},
         "title": "Green dashboards",
         "public_symptom": "Nobody has complained about speed. Tutors say the answers are wrong.",
-        "user_impact": "Students are confidently told the wrong thing.",
+        "user_impact": "Customers are confidently told the wrong thing.",
         "env": {**HEALTHY_ENV,
                 "NIMBUS_SEMANTIC_CACHE": "true",
                 "NIMBUS_SEMANTIC_CACHE_THRESHOLD": "0.55"},

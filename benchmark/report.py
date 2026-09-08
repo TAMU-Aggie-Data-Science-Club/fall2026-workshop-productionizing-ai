@@ -668,7 +668,7 @@ def cost_split(payload: dict, scenario: dict, width: int = 24) -> list[str]:
 
     Participants never deploy anything, so "what does it cost to keep a server
     on" is invisible to them by default. It is 18% of this bill and it is owed
-    whether or not a single student asks a question.
+    whether or not a single customer asks a question.
     """
     s = summarise(payload, scenario)
     tokens, infra, total = (s["usd_tokens_per_month"], s["usd_infra_per_month"],

@@ -17,7 +17,7 @@ lines = [
     "## How these numbers were produced",
     "",
     "They are **measured**, not estimated. `facilitators/eval.py` asks Nimbus "
-    f"{rows[0]['total']} questions whose answers are known to be in the menu notes, and "
+    f"{rows[0]['total']} questions whose answers are known to be in the recipe notes, and "
     "checks whether the answer actually carries the fact through. Re-run it with:",
     "",
     "```bash",

@@ -189,7 +189,7 @@ gcloud run services update nimbus-team-a --region=us-central1 --project=adsc-nim
 | | |
 | --- | --- |
 | What a team's `brief` says | "Slow to START answering. The answer itself reads fine." |
-| User impact | "Students stare at a blank box, then get a good answer." |
+| User impact | "Customers stare at a blank box, then get a good answer." |
 | Injected fault | a stage delay on retrieval (`lognormal:400:1800`) |
 | Discriminator | `retrieve` dominates the ledger while `generate` and token counts sit at baseline |
 | Rehearsed baseline | p95 **1.98 s** against the 1.50 s SLO; cost $786/mo — **fails latency, passes cost** |

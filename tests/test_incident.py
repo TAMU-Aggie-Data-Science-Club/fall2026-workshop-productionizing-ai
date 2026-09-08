@@ -61,9 +61,9 @@ class InjectionShapeTests(unittest.TestCase):
 
     def test_the_same_question_always_draws_the_same_delay(self):
         mod = _reload(NIMBUS_INCIDENT_STAGE_DELAY="retrieve:lognormal:400:1800")
-        first = asyncio.run(mod.delay("retrieve", "What is in a flat white?"))
-        second = asyncio.run(mod.delay("retrieve", "What is in a flat white?"))
-        other = asyncio.run(mod.delay("retrieve", "Is the banana bread vegan?"))
+        first = asyncio.run(mod.delay("retrieve", "What is in a caramel macchiato?"))
+        second = asyncio.run(mod.delay("retrieve", "What is in a caramel macchiato?"))
+        other = asyncio.run(mod.delay("retrieve", "How many pumps go in a grande?"))
         self.assertEqual(first, second, "a team must be able to reproduce a run")
         self.assertNotEqual(first, other)
 

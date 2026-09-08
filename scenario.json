@@ -1,8 +1,8 @@
 {
   "_comment": "LOCKED for the exercise. Illustrative, rounded, frozen. Do not edit during the workshop.",
   "company": "Nimbus",
-  "feature": "AI study assistant for university courses",
-  "incident": "Went viral during finals week. Traffic is 5x normal and climbing.",
+  "feature": "AI drink-recipe assistant for cafe baristas and customers",
+  "incident": "Went viral. Traffic is 5x normal and climbing.",
   "constraints": {
     "slo_p95_latency_s": 1.5,
     "budget_usd_per_month": 1500,

@@ -43,7 +43,7 @@ concepts, terminal setup, diagnosis, and evaluation to fit into that slot.
 
 ## 0–10: Explain what is being operated
 
-Start with: “Students rely on Nimbus while studying. An answer can be slow,
+Start with: “Baristas and customers rely on Nimbus at the bar. An answer can be slow,
 wrong, unavailable, or too expensive to serve at scale. Today your team owns
 those outcomes.” Define productionizing as making an application dependable
 for its intended users and measuring whether it meets their needs.

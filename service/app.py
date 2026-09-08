@@ -112,7 +112,7 @@ async def brief() -> dict:
         "title": os.environ.get("NIMBUS_INCIDENT_TITLE", "Nimbus is degraded"),
         "reported": os.environ.get(
             "NIMBUS_INCIDENT_BRIEF",
-            "Students say the assistant is not behaving the way it should."),
+            "Customers say the assistant is not behaving the way it should."),
         "user_impact": os.environ.get("NIMBUS_INCIDENT_IMPACT", ""),
         "targets": {
             "p95_latency_s": constraints.get("slo_p95_latency_s"),
@@ -427,7 +427,7 @@ async def ask(body: Ask):
                              "Semantic cache hit · retrieval and generation skipped",
                              timer.stages["cache"] * 1000,
                              result=cache_lookup)
-                yield _trace(request_id, "retrieve", "skipped", "Retrieve menu notes",
+                yield _trace(request_id, "retrieve", "skipped", "Retrieve recipe notes",
                              "Skipped because the response cache returned an answer")
                 yield _trace(request_id, "assemble", "skipped", "Build grounded prompt",
                              "Skipped because the response cache returned an answer")
@@ -435,7 +435,7 @@ async def ask(body: Ask):
                 yield _trace(request_id, "cache", "running", "Check prompt cache",
                              "No reusable response yet · checking after retrieval")
                 current_stage = "retrieve"
-                yield _trace(request_id, "retrieve", "running", "Retrieve menu notes",
+                yield _trace(request_id, "retrieve", "running", "Retrieve recipe notes",
                              f"Searching {retrieval.size()} indexed note chunks")
                 with timer.stage("retrieve"):
                     # Injected inside the stage timer on purpose: degradation
@@ -446,7 +446,7 @@ async def ask(body: Ask):
                     await incident.delay("retrieve", question)
                     sources = retrieval.search_details(question, config.RETRIEVE_K)
                     chunks = [source["text"] for source in sources]
-                yield _trace(request_id, "retrieve", "complete", "Retrieve menu notes",
+                yield _trace(request_id, "retrieve", "complete", "Retrieve recipe notes",
                              f"Selected {len(sources)} relevant chunk(s)",
                              timer.stages["retrieve"] * 1000,
                              sources=[{key: source[key] for key in ("source", "title", "excerpt", "score")}
@@ -454,7 +454,7 @@ async def ask(body: Ask):
 
                 current_stage = "assemble"
                 yield _trace(request_id, "assemble", "running", "Build grounded prompt",
-                             "Combining menu notes with the customer question")
+                             "Combining recipe notes with the question")
                 with timer.stage("assemble"):
                     prompt = levers.build_prompt(question, chunks)
                 yield _trace(request_id, "assemble", "complete", "Build grounded prompt",

@@ -26,7 +26,7 @@ def search(question: str, k: int) -> list[str]:
 def search_details(question: str, k: int) -> list[dict]:
     """Return note chunks plus safe, user-visible retrieval metadata.
 
-    The browser uses this to explain which menu notes grounded an answer.
+    The browser uses this to explain which recipe notes grounded an answer.
     It intentionally returns excerpts and similarity scores, not the prompt or
     model's private reasoning.
     """
@@ -38,10 +38,10 @@ def search_details(question: str, k: int) -> list[dict]:
     for i in top:
         text = str(_texts[i])
         source, separator, content = text.partition("] ")
-        source = source.lstrip("[") if separator else "menu notes"
+        source = source.lstrip("[") if separator else "recipe notes"
         title, separator, excerpt = content.partition(": ")
         if not separator:
-            title, excerpt = "Course notes", content
+            title, excerpt = "Recipe notes", content
         results.append({
             "text": text,
             "source": source,

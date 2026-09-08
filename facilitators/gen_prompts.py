@@ -1,6 +1,6 @@
 """Generate the frozen question corpus.
 
-Duplicates are DELIBERATE: at the morning rush many customers ask the same thing
+Duplicates are DELIBERATE: at the morning rush many people ask the same thing
 in the same words, and a few ask it in different words. That mix is what gives
 the cache levers something real to hit.
 
@@ -15,36 +15,36 @@ from collections import Counter
 
 # Small hot pool -- the questions everybody asks at the morning rush.
 BASE = [
-    "What is in a flat white?",
-    "Does the oat milk cost extra?",
-    "What time do you close today?",
-    "Is the banana bread vegan?",
-    "How much caffeine is in a cold brew?",
+    "What is in a caramel macchiato?",
+    "How many pumps of syrup are in a grande?",
+    "How many shots are in a grande latte?",
+    "Is the pink drink dairy free?",
+    "How much caffeine is in a grande cold brew?",
 ]
 
 # Same meaning, different words: exact cache MISSES, semantic cache HITS.
 NEAR = [
-    "What goes into a flat white?",
-    "Do you charge more for oat milk?",
-    "When do you shut this evening?",
-    "Can I eat the banana bread if I am vegan?",
+    "How do you make a caramel macchiato?",
+    "How much syrup goes in a grande?",
+    "How many espresso shots does a grande latte take?",
+    "Can I get the pink drink without dairy?",
 ]
 
 # The long tail: asked once, never again.
 TAIL = [
-    "What is a cortado?", "Do you have decaf cold brew?",
-    "Which pastries contain nuts?",
+    "What is a flat white built with?", "How long is cold brew steeped for?",
+    "Which sauces contain dairy?",
     "What is the difference between a latte and a cappuccino?",
-    "How does the loyalty card work?",
-    "Can I pay with dining dollars?",
-    "What is the soup today?", "Is the fruit cup gluten free?",
-    "Do you take cash?", "What size is a flat white?",
-    "How long does food take at peak?",
-    "Where do I pick up a mobile order?",
+    "How many pumps of mocha sauce go in a venti iced?",
+    "What is a caffe misto?",
+    "What is in a java chip frappuccino?", "Is the matcha latte sweetened?",
+    "How big is a venti iced?", "What is a ristretto?",
+    "How hot is milk steamed by default?",
+    "What goes in a vanilla sweet cream cold brew?",
     "Can I get a mocha without dairy?",
-    "What is on the autumn seasonal menu?",
-    "Do you give a discount for bringing my own cup?",
-    "What happens to unsold pastries at the end of the day?",
+    "What is the difference between blonde and signature espresso?",
+    "Why does a frappuccino need base?",
+    "What is the difference between iced coffee and cold brew?",
 ]
 
 # 10-slot pattern: 6 base (repeats), 2 near (semantic hits), 2 tail (misses).

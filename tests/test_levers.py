@@ -92,7 +92,7 @@ class LeverEndpointTests(unittest.TestCase):
         self.assertIn("depth", prompt.lower())
         self.assertNotIn("concise", prompt.lower())
         # Still carries the grounding and safety rules it inherits.
-        self.assertIn("menu notes", prompt.lower())
+        self.assertIn("recipe notes", prompt.lower())
         self.assertIn("never guess", prompt.lower())
 
     def test_verbose_stays_close_to_the_baseline_prompt_in_size(self):

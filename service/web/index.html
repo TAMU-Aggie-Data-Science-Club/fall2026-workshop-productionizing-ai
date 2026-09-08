@@ -192,18 +192,18 @@
           <span class="trace-badge">customer-facing</span>
         </div>
         <div class="ask-body">
-          <p class="card-kicker scope-note">Nimbus is the ordering assistant for <strong>Rev&rsquo;s Brew</strong>. It
-            answers from the cafe&rsquo;s drinks, food and opening-hours notes, and says so
-            when a question falls outside them. Start with one of these:</p>
+          <p class="card-kicker scope-note">Nimbus is a <strong>drink recipe assistant</strong>. It
+            answers from the bar&rsquo;s hot drink, cold drink and build-standard notes, and
+            says so when a question falls outside them. Start with one of these:</p>
           <form id="ask-form">
             <label for="question">Question</label>
-            <textarea id="question" required placeholder="What is in a flat white?"></textarea>
+            <textarea id="question" required placeholder="What is in a caramel macchiato?"></textarea>
             <div class="ask-actions">
               <div class="samples" aria-label="Example questions">
-                <button class="sample" type="button" data-question="What is in a flat white?">Flat white</button>
-                <button class="sample" type="button" data-question="Is the banana bread vegan?">Vegan?</button>
-                <button class="sample" type="button" data-question="I have a nut allergy. Is a latte safe for me?">Nut allergy</button>
-                <button class="sample" type="button" data-question="What time do you close on Sunday?">Sunday hours</button>
+                <button class="sample" type="button" data-question="What is in a caramel macchiato?">Caramel macchiato</button>
+                <button class="sample" type="button" data-question="How many pumps of syrup are in a grande?">Grande pumps</button>
+                <button class="sample" type="button" data-question="I have a severe nut allergy. Can you promise me a safe almondmilk latte?">Nut allergy</button>
+                <button class="sample" type="button" data-question="Explain how Q-learning works.">Out of scope</button>
               </div>
               <button id="submit" class="primary" type="submit">Ask Nimbus</button>
             </div>
@@ -293,7 +293,7 @@
       {stage: 'request', label: 'Request received', idle: 'Waiting for a request'},
       {stage: 'queue', label: 'Capacity check', idle: 'Waiting for an inference slot'},
       {stage: 'cache', label: 'Check response cache', idle: 'Looking for reusable work'},
-      {stage: 'retrieve', label: 'Retrieve menu notes', idle: 'Searching the indexed menu notes'},
+      {stage: 'retrieve', label: 'Retrieve recipe notes', idle: 'Searching the indexed recipe notes'},
       {stage: 'assemble', label: 'Build grounded prompt', idle: 'Combining notes and question'},
       {stage: 'route', label: 'Select model tier', idle: 'Applying routing policy'},
       {stage: 'generate', label: 'Generate response', idle: 'Streaming the answer'},
